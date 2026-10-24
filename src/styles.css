@@ -1,0 +1,1161 @@
+:root {
+  --wood-deep: #3a2213;
+  --wood: #71462a;
+  --wood-light: #9b643c;
+  --metal: #c5c8c9;
+  --metal-light: #e9ebec;
+  --metal-dark: #9ea2a4;
+  --ink: #23232a;
+  --ink-soft: #4a4a54;
+  --red-ink: #a8301d;
+  --blue-cap: #3f7ea6;
+  --yellow-cap: #cf9f1c;
+  --key-edge: #aeaa9d;
+  --lamp-a: #2b7e8d;
+  --lamp-b: #b03a20;
+  --focus: #1b5a78;
+  --gap: clamp(2px, 0.35vw, 6px);
+  --plate-pad: clamp(14px, 1.7vw, 26px);
+  --key-hang: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: clamp(12px, 3vw, 44px);
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 50% 12%, #313936 0%, #1a1f1d 42%, #0d100f 78%),
+    #0b0d0c;
+  color: #e8e4d8;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100%;
+  max-width: 1020px;
+}
+
+.stage {
+  width: 100%;
+}
+
+.unit {
+  filter: drop-shadow(0 34px 44px rgb(0 0 0 / 55%));
+}
+
+.cabinet {
+  position: relative;
+  padding: clamp(8px, 1vw, 14px) clamp(8px, 1vw, 14px) clamp(16px, 2vw, 26px);
+  border-radius: 16px;
+  background:
+    repeating-linear-gradient(
+      88deg,
+      rgb(255 255 255 / 3%) 0 2px,
+      transparent 2px 7px,
+      rgb(0 0 0 / 6%) 7px 9px
+    ),
+    repeating-linear-gradient(
+      4deg,
+      transparent 0 18px,
+      rgb(0 0 0 / 8%) 18px 19px
+    ),
+    linear-gradient(
+      155deg,
+      var(--wood-light) 0%,
+      var(--wood) 34%,
+      #7f4c29 62%,
+      var(--wood-deep) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 230 190 / 35%),
+    inset 0 -2px 4px rgb(0 0 0 / 35%);
+}
+
+.cabinet::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgb(255 235 200 / 12%);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.deck {
+  height: clamp(46px, 7vw, 92px);
+  margin-bottom: clamp(4px, 0.6vw, 8px);
+  border-radius: 8px 8px 2px 2px;
+  background:
+    radial-gradient(circle at 24% 16%, rgb(255 255 255 / 7%), transparent 55%),
+    repeating-linear-gradient(
+      45deg,
+      rgb(255 255 255 / 2.5%) 0 1px,
+      transparent 1px 3px
+    ),
+    linear-gradient(#242422, #0b0b0a 72%);
+  box-shadow:
+    inset 0 2px 12px rgb(0 0 0 / 75%),
+    inset 0 -1px 0 rgb(255 255 255 / 9%),
+    0 2px 3px rgb(0 0 0 / 45%);
+}
+
+.faceplate {
+  position: relative;
+  padding: clamp(14px, 1.6vw, 24px) var(--plate-pad) 0;
+  border-radius: 3px;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at 12% 6%, rgb(255 255 255 / 26%), transparent 46%),
+    radial-gradient(ellipse at 88% 96%, rgb(74 78 82 / 18%), transparent 55%),
+    repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 5%) 0 1px,
+      rgb(0 0 0 / 3%) 1px 2px,
+      transparent 2px 6px
+    ),
+    linear-gradient(
+      100deg,
+      var(--metal-dark) 0%,
+      var(--metal-light) 24%,
+      var(--metal) 55%,
+      var(--metal-dark) 82%,
+      var(--metal) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 70%),
+    inset 0 -3px 8px rgb(40 44 46 / 26%),
+    0 1px 2px rgb(0 0 0 / 30%);
+}
+
+.faceplate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 30% 60%, rgb(90 96 100 / 10%), transparent 42%);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.faceplate > * {
+  position: relative;
+  z-index: 1;
+}
+
+.top-controls {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.6fr) minmax(320px, 3fr) minmax(118px, 1fr) minmax(60px, 0.5fr);
+  align-items: start;
+  gap: clamp(8px, 1.6vw, 24px);
+  padding-bottom: clamp(8px, 1.1vw, 14px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  padding-top: clamp(6px, 1.4vw, 20px);
+}
+
+.brand-plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 100%;
+  max-width: 124px;
+  padding: 7px 10px 6px;
+  border: 1px solid #8d9092;
+  border-radius: 3px;
+  background: linear-gradient(165deg, #f2f4f5, #d7dadb 60%, #e6e9ea);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 2px rgb(0 0 0 / 16%),
+    0 1px 2px rgb(0 0 0 / 22%);
+  color: #232329;
+}
+
+.brand-name {
+  font-size: clamp(15px, 1.8vw, 23px);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: lowercase;
+}
+
+.brand-sub {
+  font-size: clamp(6px, 0.62vw, 8px);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.fader-bank {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.fader-cluster {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
+/* The two master faders stand apart from the group of three. */
+.fader--master {
+  margin-left: clamp(14px, 1.8vw, 26px);
+}
+
+.fader {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(80px, 1fr) auto;
+  height: clamp(112px, 12.6vw, 162px);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+  --comb-left: clamp(16px, 1.7vw, 22px);
+  --comb-right: clamp(16px, 1.7vw, 22px);
+  --digit-width: clamp(16px, 1.7vw, 22px);
+  /* The band that trails the last slider of a group carries shorter
+     lines than the band between the sliders. */
+  --comb-tail: clamp(20px, 2.2vw, 28px);
+}
+
+/* The volume fader reads the numbers on its left: the band of the second
+   group starts at the number column, which is printed a little away from
+   the slot. Its comb is handed over to the balance fader, which is spaced
+   further out so the two bands stay separate. */
+.fader--left {
+  --comb-left: clamp(26px, 2.8vw, 36px);
+  --comb-right: clamp(30px, 3.2vw, 40px);
+}
+
+.fader--pair-end {
+  --comb-left: clamp(30px, 3.2vw, 40px);
+  --comb-right: var(--comb-tail);
+  margin-left: clamp(16px, 1.8vw, 24px);
+}
+
+.fader--end {
+  --comb-right: var(--comb-tail);
+}
+
+.fader--right {
+  grid-template-columns: var(--comb-left) minmax(18px, 26px) var(--comb-right)
+    var(--digit-width);
+}
+
+.fader--right .fader-travel {
+  grid-column: 2;
+}
+
+.fader--right .fader-scale {
+  grid-column: 3;
+}
+
+.fader--right .fader-digits {
+  grid-column: 4;
+}
+
+.fader--right .fader-name {
+  grid-column: 2;
+}
+
+.fader--left {
+  grid-template-columns: var(--digit-width) var(--comb-left) minmax(18px, 26px)
+    var(--comb-right);
+}
+
+.fader--left .fader-digits {
+  grid-column: 1;
+}
+
+.fader--left .fader-travel {
+  grid-column: 3;
+}
+
+.fader--left .fader-scale {
+  grid-column: 4;
+}
+
+.fader--left .fader-name {
+  grid-column: 3;
+}
+
+.fader--none,
+.fader--end,
+.fader--pair-end {
+  grid-template-columns: var(--comb-left) minmax(18px, 26px) var(--comb-right);
+}
+
+.fader--none .fader-travel,
+.fader--end .fader-travel,
+.fader--pair-end .fader-travel {
+  grid-column: 2;
+}
+
+.fader--none .fader-scale,
+.fader--end .fader-scale,
+.fader--pair-end .fader-scale {
+  grid-column: 3;
+}
+
+.fader--none .fader-name,
+.fader--end .fader-name,
+.fader--pair-end .fader-name {
+  grid-column: 2;
+}
+
+.fader-scale {
+  grid-row: 1;
+}
+
+.fader-digits {
+  position: relative;
+  grid-row: 1;
+}
+
+/* The comb band runs on through the number column, as on the original
+   panel; each number only breaks the line it is printed on. */
+.fader-digits::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(35 35 42 / 30%) 0 1px,
+    transparent 1px calc((100% - 1px) / 10)
+  );
+  pointer-events: none;
+}
+
+.fader-tick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: clamp(7px, 0.66vw, 9.5px);
+  color: var(--ink-soft);
+  opacity: 0.9;
+  /* The stroke knocks the comb line out around the glyph. */
+  -webkit-text-stroke: 2px #e6e8e9;
+  paint-order: stroke fill;
+}
+
+/* In the trio the numbers sit in the middle of the gap between two
+   sliders. */
+.fader--right .fader-tick {
+  right: auto;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* In the second group the band starts at the numbers, so they are printed
+   at the left end of their column. */
+.fader--left .fader-tick {
+  right: auto;
+  left: 0;
+}
+
+.tick-10 {
+  top: 0;
+}
+
+.tick-5 {
+  top: 50%;
+}
+
+.tick-0 {
+  top: 100%;
+}
+
+.fader-travel {
+  position: relative;
+  grid-row: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* The printed comb scale runs on both sides of the slot and continues
+   behind it, as on the original panel. The lines are unit divisions of
+   the 0..10 scale, so eleven of them are printed from 0 up to 10. */
+.fader-travel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--comb-left));
+  right: calc(-1 * var(--comb-right));
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(35 35 42 / 30%) 0 1px,
+    transparent 1px calc((100% - 1px) / 10)
+  );
+  pointer-events: none;
+}
+
+.fader-slot {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  bottom: 2px;
+  width: 9px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: linear-gradient(90deg, #151512, #3b3a32 42%, #111110);
+  box-shadow:
+    inset 0 0 4px rgb(0 0 0 / 90%),
+    0 0 0 1px rgb(255 255 255 / 30%);
+}
+
+.fader-slot::before,
+.fader-slot::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 45%);
+}
+
+.fader-slot::before {
+  left: -4px;
+}
+
+.fader-slot::after {
+  right: -4px;
+}
+
+.fader-cap {
+  position: absolute;
+  left: 50%;
+  width: clamp(34px, 3.6vw, 50px);
+  height: clamp(20px, 2.1vw, 28px);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  border: 1px solid #54524b;
+  background: linear-gradient(
+    180deg,
+    #fdfdf8 0%,
+    #e4e1d5 22%,
+    #b7b2a3 50%,
+    #878377 82%,
+    #beb9ab 100%
+  );
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 45%),
+    0 2px 4px rgb(0 0 0 / 50%),
+    inset 0 1px 1px rgb(255 255 255 / 90%),
+    inset 0 -2px 3px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.fader-cap::before {
+  content: '';
+  position: absolute;
+  inset: 3px 6px 38%;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 2px 3px rgb(255 255 255 / 60%),
+    inset 0 -2px 4px rgb(0 0 0 / 55%),
+    0 0 1px rgb(0 0 0 / 40%);
+}
+
+.fader-cap.blue::before {
+  background: linear-gradient(#8fb9d2, var(--blue-cap) 55%, #39627e);
+}
+
+.fader-cap.yellow::before {
+  background: linear-gradient(#e6c95e, var(--yellow-cap) 55%, #8f6d12);
+}
+
+.fader-name {
+  grid-row: 2;
+  justify-self: center;
+  padding-top: clamp(4px, 0.6vw, 8px);
+  text-align: center;
+  font-size: clamp(7px, 0.7vw, 10.5px);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.fader:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.tempo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding-top: clamp(2px, 0.8vw, 10px);
+}
+
+.tempo-ticks {
+  position: absolute;
+  top: calc(
+    clamp(2px, 0.8vw, 10px) + clamp(8px, 1.2vw, 16px) +
+      clamp(76px, 8vw, 98px) / 2 - clamp(104px, 10.8vw, 132px) / 2
+  );
+  left: 50%;
+  width: clamp(104px, 10.8vw, 132px);
+  height: clamp(104px, 10.8vw, 132px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.tempo-tick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgb(35 35 42 / 75%);
+  transform: translate(-50%, -50%) rotate(var(--tick)) translateY(clamp(-57px, -4.8vw, -55px));
+  transform-origin: center;
+}
+
+.knob-base {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(76px, 8vw, 98px);
+  aspect-ratio: 1;
+  margin-top: clamp(8px, 1.2vw, 16px);
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(
+      rgb(255 255 255 / 12%) 0 1deg,
+      transparent 1deg 4deg
+    ),
+    radial-gradient(circle at 38% 30%, #fbfcfc, #c3c7c8 42%, #8f9496 70%, #5d6264);
+  box-shadow:
+    0 3px 5px rgb(0 0 0 / 42%),
+    inset 0 1px 2px #fff,
+    inset 0 -1px 3px rgb(0 0 0 / 32%);
+}
+
+.knob {
+  position: relative;
+  width: 76%;
+  aspect-ratio: 1;
+  border: 2px solid #1e1e1b;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(
+      rgb(255 255 255 / 7%) 0 2deg,
+      transparent 2deg 7deg
+    ),
+    radial-gradient(circle at 34% 26%, #54534b, #20201d 55%, #080808 100%);
+  box-shadow:
+    inset 0 2px 3px rgb(255 255 255 / 13%),
+    inset 0 -5px 9px rgb(0 0 0 / 90%),
+    0 3px 6px rgb(0 0 0 / 45%);
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+
+.knob:active {
+  cursor: grabbing;
+}
+
+.knob::before {
+  content: '';
+  position: absolute;
+  inset: 9%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 24%, #3d3c37, #141412 70%);
+  box-shadow: inset 0 1px 2px rgb(255 255 255 / 10%);
+}
+
+.knob-pointer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  transform: rotate(var(--angle, 0deg));
+  pointer-events: none;
+}
+
+.knob-pointer::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 5%;
+  width: 3px;
+  height: 45%;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: linear-gradient(#f6f2e6, #b9b2a0);
+  box-shadow: 0 0 4px rgb(0 0 0 / 45%);
+}
+
+.knob:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.tempo-caption {
+  display: flex;
+  justify-content: space-between;
+  width: clamp(104px, 10.8vw, 132px);
+  margin-top: clamp(5px, 0.8vw, 9px);
+  font-size: clamp(7px, 0.64vw, 9px);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.tempo-name {
+  letter-spacing: 0.16em;
+}
+
+.tempo-readout {
+  margin-top: 1px;
+  font-size: clamp(8px, 0.7vw, 10px);
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+.right-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-self: end;
+  padding-bottom: 4px;
+}
+
+.lamp-block {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 9px 10px;
+}
+
+/* The bank marks printed beside the lamps: black for section A, red for
+   section B, as on the original panel. */
+.lamp-mark {
+  justify-self: center;
+  width: 13px;
+  height: 10px;
+  clip-path: polygon(0% 64%, 44% 64%, 38% 6%, 100% 42%, 52% 42%, 58% 96%);
+}
+
+.lamp-mark-a {
+  grid-column: 2;
+  grid-row: 1;
+  background: var(--ink);
+}
+
+.lamp-mark-b {
+  grid-column: 2;
+  grid-row: 2;
+  background: var(--red-ink);
+}
+
+.lamp {
+  justify-self: center;
+  width: clamp(18px, 1.9vw, 25px);
+  aspect-ratio: 1;
+  border: 2px solid #6f7477;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #4c5052, #1c1c19 70%);
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 80%),
+    0 0 0 1px rgb(255 255 255 / 40%),
+    0 1px 2px rgb(0 0 0 / 40%);
+  transition: background 90ms linear, box-shadow 90ms linear;
+}
+
+.lamp-a {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.lamp-b {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.lamp-a.on {
+  background: radial-gradient(circle at 38% 32%, #c8f3ef, var(--lamp-a) 45%, #12383f 100%);
+  box-shadow:
+    0 0 7px rgb(86 191 197 / 75%),
+    inset 0 1px 2px rgb(255 255 255 / 55%),
+    0 0 0 1px rgb(255 255 255 / 40%);
+}
+
+.lamp-b.on {
+  background: radial-gradient(circle at 38% 32%, #ffcbb8, var(--lamp-b) 45%, #4d160e 100%);
+  box-shadow:
+    0 0 7px rgb(206 94 67 / 75%),
+    inset 0 1px 2px rgb(255 255 255 / 55%),
+    0 0 0 1px rgb(255 255 255 / 40%);
+}
+
+.bank-switch {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.bank-slot {
+  position: relative;
+  width: 19px;
+  height: 64px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #0e0f11, #2b2e32 55%, #17181a);
+  box-shadow:
+    inset 0 2px 6px rgb(0 0 0 / 90%),
+    inset 2px 0 4px rgb(0 0 0 / 55%),
+    1px 0 0 rgb(255 255 255 / 55%);
+}
+
+/* The chrome paddle slides in the slit: it comes out of the top for bank A
+   and out of the bottom for bank B, the way the original lever does. */
+.bank-arm {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 13px;
+  margin: -6.5px 0 0 -9px;
+  border-radius: 3px 4px 4px 3px;
+  background: linear-gradient(180deg, #f8fafb, #c3c8cb 52%, #868b8e);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 55%);
+  transform: translateY(-11px) rotate(-16deg);
+  transition: transform 140ms ease;
+  pointer-events: none;
+}
+
+.bank-arm::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  width: 14px;
+  height: 15px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: linear-gradient(160deg, #fdfefe, #b2b7ba 58%, #73787b);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 65%),
+    0 1px 2px rgb(0 0 0 / 45%);
+}
+
+.bank-switch[aria-checked='true'] .bank-arm {
+  transform: translateY(12px) rotate(24deg);
+}
+
+.bank-switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.rhythm-section {
+  position: relative;
+  padding-top: clamp(16px, 2.6vw, 36px);
+  padding-bottom: clamp(20px, 3.2vw, 46px);
+}
+
+.rhythm-legend {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr)) minmax(0, 1.15fr);
+  gap: var(--gap);
+}
+
+.legend-row {
+  display: contents;
+}
+
+.legend-name {
+  overflow: hidden;
+  text-align: center;
+  font-size: clamp(7px, 0.76vw, 10.5px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.45;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+  opacity: 0.8;
+  border-radius: 2px;
+  transition: opacity 120ms linear, background 120ms linear, color 120ms linear;
+}
+
+.legend-b .legend-name {
+  color: var(--red-ink);
+}
+
+.legend-row.active .legend-name {
+  opacity: 1;
+}
+
+.legend-a .legend-name.is-selected {
+  background: var(--ink);
+  color: #f4f2ec;
+}
+
+.legend-b .legend-name.is-selected {
+  background: var(--red-ink);
+  color: #f7ece8;
+}
+
+.legend-spacer {
+  min-width: 0;
+}
+
+.keybed {
+  margin: clamp(10px, 1.2vw, 18px) calc(-1 * var(--plate-pad)) 0;
+  padding: 0 var(--plate-pad);
+  background: linear-gradient(#1d1d1b, #0a0a09 78%);
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 80%),
+    0 -1px 0 rgb(255 255 255 / 25%);
+}
+
+.rhythm-keys {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr)) minmax(0, 1.15fr);
+  gap: var(--gap);
+  align-items: start;
+  margin-bottom: calc(-1 * var(--key-hang));
+  padding-top: clamp(4px, 0.5vw, 7px);
+}
+
+.rhythm-key {
+  position: relative;
+  height: clamp(34px, 4vw, 48px);
+  padding: 0;
+  border: 1px solid var(--key-edge);
+  border-radius: 3px 3px 4px 4px;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 32%), transparent 20% 80%, rgb(0 0 0 / 7%)),
+    linear-gradient(#fdfaf1 0%, #f1ecdf 46%, #dcd6c7 100%);
+  box-shadow:
+    0 4px 0 #a29c8f,
+    0 6px 7px rgb(0 0 0 / 32%),
+    inset 0 1px 0 #fffef8;
+  color: #7a7466;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 60ms ease,
+    box-shadow 60ms ease,
+    background 70ms ease;
+}
+
+.rhythm-key::before {
+  content: '';
+  position: absolute;
+  top: -17px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid rgb(35 35 42 / 45%);
+}
+
+.key-tick {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 52%;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: var(--ink);
+  opacity: 0;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+  transition: opacity 90ms linear;
+}
+
+.rhythm-section[data-bank='1'] .key-tick {
+  background: var(--red-ink);
+}
+
+.rhythm-key:hover {
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 50%), transparent 18% 82%, rgb(0 0 0 / 7%)),
+    linear-gradient(#fffef7 0%, #f6f1e5 46%, #e1dbcc 100%);
+}
+
+.rhythm-key[aria-pressed='true'] {
+  transform: translateY(5px);
+  background: linear-gradient(#b4ae9d 0%, #bcb6a5 62%, #a8a291 100%);
+  box-shadow:
+    0 1px 0 #7d7869,
+    0 2px 3px rgb(0 0 0 / 35%),
+    inset 0 6px 10px rgb(0 0 0 / 40%);
+}
+
+.rhythm-key[aria-pressed='true']::before {
+  transform: translateX(-50%) translateY(-5px);
+}
+
+.rhythm-key[aria-pressed='true'] .key-tick {
+  opacity: 1;
+}
+
+.rhythm-key:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.start-stop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: clamp(34px, 4vw, 48px);
+  padding: 3px 2px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.start-rocker {
+  width: min(92%, 58px);
+  height: 62%;
+  border: 1px solid #0a0a09;
+  border-radius: 4px 4px 3px 3px;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 7%), transparent 30% 70%, rgb(0 0 0 / 25%)),
+    linear-gradient(#2c2c28, #10100f 65%, #242421);
+  box-shadow:
+    0 4px 0 #080807,
+    0 6px 7px rgb(0 0 0 / 32%),
+    inset 0 2px 2px rgb(255 255 255 / 9%);
+  transition:
+    transform 70ms ease,
+    box-shadow 70ms ease;
+}
+
+.start-stop:hover .start-rocker {
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 9%), transparent 30% 70%, rgb(0 0 0 / 22%)),
+    linear-gradient(#353530, #171715 65%, #2b2b27);
+}
+
+.start-stop[aria-pressed='true'] .start-rocker {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 0 #080807,
+    0 2px 3px rgb(0 0 0 / 28%),
+    inset 0 3px 7px rgb(0 0 0 / 70%);
+}
+
+.start-label,
+.stop-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: clamp(6.5px, 0.64vw, 9px);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  opacity: 0.85;
+}
+
+.run-led {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4a1610;
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 80%);
+  transition: background 90ms linear, box-shadow 90ms linear;
+}
+
+.start-stop[aria-pressed='true'] .run-led {
+  background: #ff6a4a;
+  box-shadow:
+    0 0 6px rgb(255 106 74 / 85%),
+    inset 0 1px 1px rgb(255 255 255 / 55%);
+}
+
+.start-stop[aria-pressed='true'] .start-label {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.start-stop:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.status {
+  min-height: 1.2em;
+  margin: clamp(12px, 1.6vw, 18px) 0 0;
+  text-align: center;
+  font-size: clamp(10px, 0.95vw, 12px);
+  letter-spacing: 0.08em;
+  color: #9aada3;
+  transition: color 150ms linear;
+}
+
+.status.error {
+  color: #e09582;
+}
+
+.footnote {
+  margin: 7px 0 0;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #6c7a72;
+}
+
+.footnote a {
+  color: #9aada3;
+  text-decoration: none;
+}
+
+.footnote a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .top-controls {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand tempo'
+      'faders faders'
+      'right right';
+    align-items: center;
+    gap: clamp(10px, 2.4vw, 20px);
+  }
+
+  .brand {
+    grid-area: brand;
+    padding-top: 0;
+  }
+
+  .fader-bank {
+    grid-area: faders;
+    justify-content: center;
+    gap: 0;
+  }
+
+  /* The volume/balance pair keeps its continuous band; the group gap
+     between the trio and the pair comes from the master fader's margin. */
+  .fader--master {
+    margin-left: clamp(10px, 3vw, 26px);
+    margin-right: 0;
+  }
+
+  .tempo {
+    grid-area: tempo;
+    padding-top: 0;
+    margin-right: clamp(8px, 3vw, 26px);
+  }
+
+  .right-controls {
+    grid-area: right;
+    justify-content: center;
+    padding-bottom: 0;
+  }
+
+  .fader {
+    height: clamp(96px, 17vw, 132px);
+  }
+}
+
+@media (max-width: 560px) {
+  body {
+    display: block;
+    overflow-x: auto;
+  }
+
+  #app {
+    min-width: 540px;
+  }
+
+  .brand-plate {
+    max-width: 108px;
+  }
+
+  .fader {
+    --comb-left: 14px;
+    --comb-right: 14px;
+    --digit-width: 16px;
+    --comb-tail: 18px;
+  }
+
+  .fader--left {
+    --comb-right: 24px;
+  }
+
+  .fader--pair-end {
+    --comb-left: 24px;
+  }
+  .faceplate {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .keybed {
+    margin-left: -12px;
+    margin-right: -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .cabinet {
+    padding: 8px 8px 18px;
+    border-radius: 12px;
+  }
+
+  .fader-name {
+    letter-spacing: 0.02em;
+  }
+
+  .legend-name {
+    font-size: 5px;
+    letter-spacing: 0;
+  }
+
+  .rhythm-key {
+    border-radius: 2px 2px 4px 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
