@@ -10,6 +10,10 @@ if (host === null) {
 const engine = new PoppyEngine();
 new Panel(engine, host);
 
+// A handle for the end-to-end checks: the smoke tests drive the engine
+// through it and read the panel state back.
+(window as unknown as { poppy?: PoppyEngine }).poppy = engine;
+
 const footnote = document.createElement('p');
 footnote.className = 'footnote';
 const link = document.createElement('a');

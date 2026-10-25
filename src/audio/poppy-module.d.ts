@@ -29,6 +29,7 @@ declare module '*poppy.mjs' {
     noInitialRun?: boolean;
     print?: (text: string) => void;
     printErr?: (text: string) => void;
+    locateFile?: (path: string) => string;
   }
 
   const createPoppyModule: (

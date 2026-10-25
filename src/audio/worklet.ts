@@ -25,9 +25,11 @@ class PoppyProcessor extends AudioWorkletProcessor {
   private queue: EngineCommand[] = [];
   private panel: PanelState = { ...INITIAL_PANEL_STATE };
   private lastPanel: PanelState = { ...INITIAL_PANEL_STATE };
+  private wasmBinary: ArrayBuffer | undefined;
+  private starting = false;
 
   private sincePanel = 0;
-  private lastFlash = -1;
+  private lastColumn = -1;
 
   constructor(options: WorkletOptions) {
     super();
@@ -41,8 +43,82 @@ class PoppyProcessor extends AudioWorkletProcessor {
       this.handle(command);
     };
 
-    const wasmBinary = options.processorOptions?.wasmBinary;
-    createPoppyModule({ wasmBinary })
+    this.wasmBinary = options.processorOptions?.wasmBinary;
+  }
+
+  process(
+    _inputs: Float32Array[][],
+    outputs: Float32Array[][],
+  ): boolean {
+    const module = this.module;
+    const samples = this.samples;
+    const output = outputs[0];
+
+    if (module === null || samples === null || output === undefined) {
+      // The engine is built from the first render quantum and not from the
+      // constructor: while the worklet global scope is still initialising,
+      // the audio thread does not run the tasks the WebAssembly compiler
+      // needs, and the compilation never finishes.
+      if (!this.starting) {
+        this.start();
+      }
+      if (output !== undefined) {
+        for (const channel of output) {
+          channel.fill(0);
+        }
+      }
+      return true;
+    }
+
+    module._poppy_process(this.context, this.outPtr, BLOCK_FRAMES);
+
+    const left = output[0];
+    const right = output[1] ?? output[0];
+    if (left === undefined || right === undefined) {
+      return true;
+    }
+
+    for (let frame = 0; frame < BLOCK_FRAMES; frame += 1) {
+      const index = frame * 2;
+      left[frame] = (samples[index] ?? 0) / 32768;
+      right[frame] = (samples[index + 1] ?? 0) / 32768;
+    }
+
+    this.sincePanel += BLOCK_FRAMES;
+    this.readPanel();
+
+    // The playhead has to follow the grid closely, so a snapshot is posted
+    // as soon as the column moves instead of waiting for the periodic
+    // update. The periodic update still carries the slower fields.
+    if (this.panel.column !== this.lastColumn) {
+      this.lastColumn = this.panel.column;
+      this.sincePanel = 0;
+      this.postPanel();
+    } else if (this.sincePanel >= PANEL_INTERVAL) {
+      this.sincePanel = 0;
+      this.postPanel();
+    }
+
+    return true;
+  }
+
+  /**
+   * Build the engine.
+   *
+   * The wasm binary is handed over as bytes, and `locateFile` keeps the
+   * Emscripten runtime from building a `URL` for it: an AudioWorkletGlobal
+   * Scope has no `URL` constructor.
+   */
+  private start(): void {
+    this.starting = true;
+
+    const wasmBinary = this.wasmBinary;
+    if (wasmBinary === undefined) {
+      this.emit({ type: 'error', message: 'the engine binary is missing' });
+      return;
+    }
+
+    createPoppyModule({ wasmBinary, locateFile: (path) => path })
       .then((module) => {
         this.module = module;
         this.context = module._poppy_create(sampleRate);
@@ -72,42 +148,6 @@ class PoppyProcessor extends AudioWorkletProcessor {
           message: error instanceof Error ? error.message : String(error),
         });
       });
-  }
-
-  process(
-    _inputs: Float32Array[][],
-    outputs: Float32Array[][],
-  ): boolean {
-    const module = this.module;
-    const samples = this.samples;
-    const output = outputs[0];
-
-    if (module === null || samples === null || output === undefined) {
-      return true;
-    }
-
-    module._poppy_process(this.context, this.outPtr, BLOCK_FRAMES);
-
-    const left = output[0];
-    const right = output[1] ?? output[0];
-    if (left === undefined || right === undefined) {
-      return true;
-    }
-
-    for (let frame = 0; frame < BLOCK_FRAMES; frame += 1) {
-      const index = frame * 2;
-      left[frame] = (samples[index] ?? 0) / 32768;
-      right[frame] = (samples[index + 1] ?? 0) / 32768;
-    }
-
-    this.sincePanel += BLOCK_FRAMES;
-    if (this.sincePanel >= PANEL_INTERVAL) {
-      this.sincePanel = 0;
-      this.readPanel();
-      this.postPanel();
-    }
-
-    return true;
   }
 
   private handle(command: EngineCommand): void {
@@ -215,7 +255,6 @@ class PoppyProcessor extends AudioWorkletProcessor {
     last.running = panel.running;
     last.column = panel.column;
     last.flashCount = panel.flashCount;
-    this.lastFlash = panel.flashCount;
 
     this.emit({ type: 'panel', state: { ...panel } });
   }

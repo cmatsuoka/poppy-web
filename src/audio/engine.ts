@@ -10,12 +10,29 @@ import {
 } from './protocol';
 
 const Q16 = 65536;
+const FALLBACK_SAMPLE_RATE = 48000;
 
 interface Settings {
   tempo: number;
   volume: number;
   balance: number;
   instrGain: number[];
+}
+
+/**
+ * The Web Audio worklet is only exposed in a secure context, and a few
+ * browsers still hide it behind a flag. Check for that before the engine
+ * tries to build a node, so the panel can say what is actually wrong
+ * instead of failing with a bare "cannot read addModule".
+ */
+function workletUnavailableReason(): string | null {
+  if (typeof AudioWorkletNode === 'undefined') {
+    return 'this browser does not support the Web Audio worklet';
+  }
+  if (!window.isSecureContext) {
+    return 'the Web Audio worklet needs a secure context — open the app on http://localhost:5173 or over HTTPS';
+  }
+  return null;
 }
 
 function defaultSettings(): Settings {
@@ -46,6 +63,27 @@ export class PoppyEngine {
     number,
     { resolve: (view: PatternView) => void; reject: (reason: Error) => void }
   >();
+  private patternCache = new Map<number, PatternView>();
+  private patternPending = new Map<number, Promise<PatternView>>();
+  // A missing worklet is not something a retry can fix, so the failure is
+  // latched and the engine stops trying to build a node.
+  private fatal: Error | null = null;
+
+  constructor() {
+    const unsupported = workletUnavailableReason();
+    if (unsupported !== null) {
+      this.fatal = new Error(unsupported);
+    }
+  }
+
+  /**
+   * Why the engine cannot run at all, if that is the case. The panel shows
+   * this before anything is pressed, so a browser or an address that can
+   * never play is obvious right away.
+   */
+  get unavailable(): string | null {
+    return this.fatal?.message ?? null;
+  }
 
   get panel(): PanelState {
     return this.panelState;
@@ -53,6 +91,15 @@ export class PoppyEngine {
 
   get running(): boolean {
     return this.panelState.running;
+  }
+
+  get tempo(): number {
+    return this.settings.tempo;
+  }
+
+  /** The rate the engine renders at. */
+  get sampleRate(): number {
+    return this.context?.sampleRate ?? FALLBACK_SAMPLE_RATE;
   }
 
   onPanel(listener: (state: PanelState) => void): () => void {
@@ -72,6 +119,9 @@ export class PoppyEngine {
   async start(): Promise<void> {
     await this.ensure();
     this.post({ type: 'start' });
+    // The context may still be held back by the autoplay policy; the resume
+    // promise then stays pending until a gesture unlocks the context.
+    void this.resume();
   }
 
   stop(): void {
@@ -120,11 +170,33 @@ export class PoppyEngine {
   }
 
   getPattern(rhythm: number): Promise<PatternView> {
-    return new Promise((resolve, reject) => {
+    const cached = this.patternCache.get(rhythm);
+    if (cached !== undefined) {
+      return Promise.resolve(cached);
+    }
+
+    const inflight = this.patternPending.get(rhythm);
+    if (inflight !== undefined) {
+      return inflight;
+    }
+
+    const request = new Promise<PatternView>((resolve, reject) => {
       this.patternRequests.set(rhythm, { resolve, reject });
       this.post({ type: 'pattern', rhythm });
       this.wake();
-    });
+    })
+      .then((view) => {
+        this.patternCache.set(rhythm, view);
+        this.patternPending.delete(rhythm);
+        return view;
+      })
+      .catch((error: unknown) => {
+        this.patternPending.delete(rhythm);
+        throw error;
+      });
+
+    this.patternPending.set(rhythm, request);
+    return request;
   }
 
   async dispose(): Promise<void> {
@@ -138,8 +210,11 @@ export class PoppyEngine {
   }
 
   private async ensure(): Promise<void> {
+    if (this.fatal !== null) {
+      throw this.fatal;
+    }
+
     if (this.node !== null) {
-      await this.context?.resume();
       return;
     }
 
@@ -147,52 +222,82 @@ export class PoppyEngine {
       return this.starting;
     }
 
-    this.starting = (async () => {
-      const context = new AudioContext({ latencyHint: 'interactive' });
-      try {
-        const [bytes] = await Promise.all([
-          fetch(wasmUrl).then(async (response) => {
-            if (!response.ok) {
-              throw new Error(`wasm request failed (${response.status})`);
-            }
-            return response.arrayBuffer();
-          }),
-          context.audioWorklet.addModule(workletUrl),
-        ]);
-
-        const node = new AudioWorkletNode(context, 'poppy-processor', {
-          numberOfInputs: 0,
-          numberOfOutputs: 1,
-          outputChannelCount: [2],
-          processorOptions: { wasmBinary: bytes },
-        });
-
-        node.port.onmessage = (event: MessageEvent<EngineEvent>) => {
-          this.handleEvent(event.data);
-        };
-        node.addEventListener('processorerror', () => {
-          this.emitError('the audio processor stopped unexpectedly');
-        });
-
-        node.connect(context.destination);
-        this.context = context;
-        this.node = node;
-        this.applySettings();
-        for (const command of this.pending) {
-          node.port.postMessage(command);
-        }
-        this.pending.length = 0;
-        await context.resume();
-      } catch (error) {
-        await context.close();
-        throw error;
-      }
-    })();
+    this.starting = this.createNode();
 
     try {
       await this.starting;
     } finally {
       this.starting = null;
+    }
+  }
+
+  private async createNode(): Promise<void> {
+    const unsupported = workletUnavailableReason();
+    if (unsupported !== null) {
+      this.fatal = new Error(unsupported);
+      throw this.fatal;
+    }
+
+    const context = new AudioContext({ latencyHint: 'interactive' });
+    const worklet: AudioWorklet | undefined = context.audioWorklet;
+    if (worklet === undefined) {
+      await context.close();
+      this.fatal = new Error('this browser does not expose the Web Audio worklet');
+      throw this.fatal;
+    }
+
+    try {
+      const [bytes] = await Promise.all([
+        fetch(wasmUrl).then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`wasm request failed (${response.status})`);
+          }
+          return response.arrayBuffer();
+        }),
+        worklet.addModule(workletUrl),
+      ]);
+
+      const node = new AudioWorkletNode(context, 'poppy-processor', {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        processorOptions: { wasmBinary: bytes },
+      });
+
+      node.port.onmessage = (event: MessageEvent<EngineEvent>) => {
+        this.handleEvent(event.data);
+      };
+      node.addEventListener('processorerror', () => {
+        this.emitError('the audio processor stopped unexpectedly');
+      });
+
+      node.connect(context.destination);
+      this.context = context;
+      this.node = node;
+      this.applySettings();
+      for (const command of this.pending) {
+        node.port.postMessage(command);
+      }
+      this.pending.length = 0;
+      // The context starts on its own once the page has been activated. The
+      // resume is not awaited: the autoplay policy may hold it back until a
+      // gesture happens, and the engine has to stay usable in the meantime.
+      void this.resume();
+    } catch (error) {
+      await context.close();
+      throw error;
+    }
+  }
+
+  private async resume(): Promise<void> {
+    const context = this.context;
+    if (context === null || context.state === 'running') {
+      return;
+    }
+    try {
+      await context.resume();
+    } catch {
+      // A closed context cannot be resumed; the transport stays silent.
     }
   }
 
@@ -215,8 +320,13 @@ export class PoppyEngine {
 
   private wake(): void {
     void this.ensure().catch((error: unknown) => {
-      this.emitError(error instanceof Error ? error.message : String(error));
+      const reason = error instanceof Error ? error : new Error(String(error));
+      this.emitError(reason.message);
+      this.rejectAllPatternRequests(reason);
     });
+    // A control that is moved is a user gesture: it may bring a context
+    // that the browser suspended back to life.
+    void this.resume();
   }
 
   private handleEvent(event: EngineEvent): void {

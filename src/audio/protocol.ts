@@ -45,6 +45,11 @@ export const INSTRUMENT_COUNT = INSTRUMENT_NAMES.length;
 export const RHYTHM_COUNT = RHYTHM_NAMES.length;
 export const RHYTHM_BUTTON_COUNT = 10;
 
+// The engine's grid is a fixed 64 column cycle. A rhythm may store only its
+// shortest repeating period (16, 32 or 64 columns); the rest of the cycle
+// repeats it.
+export const PATTERN_COLUMNS = 64;
+
 export interface PanelState {
   bank: Bank;
   buttons: number;

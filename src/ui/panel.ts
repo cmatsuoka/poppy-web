@@ -4,6 +4,7 @@ import {
   type Bank,
   type PanelState,
 } from '../audio/protocol';
+import { PatternGrid } from './pattern-grid';
 
 const Q16 = 65536;
 
@@ -302,6 +303,10 @@ export class Panel {
   private bankSwitch!: HTMLButtonElement;
   private startStop!: HTMLButtonElement;
   private readonly status: HTMLParagraphElement;
+  private readonly statusText: HTMLSpanElement;
+  private readonly banner: HTMLDivElement;
+  private readonly bannerText: HTMLParagraphElement;
+  private readonly card: PatternGrid;
 
   private state: PanelState = {
     bank: 0,
@@ -314,6 +319,12 @@ export class Panel {
     flashCount: 0,
   };
 
+  // The selection the user has just made. The panel shows it right away
+  // and hands it over to the engine, which confirms it in the next panel
+  // snapshot. The override is dropped once the engine reports the same
+  // selection; until then it also covers an engine that never answers.
+  private requested: { bank: Bank; buttons: number } | null = null;
+
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private lastFlash = -1;
   private readonly reducedMotion = window.matchMedia(
@@ -324,6 +335,18 @@ export class Panel {
     this.engine = engine;
 
     this.root = element('div', 'stage');
+
+    // A problem that stops the engine from ever running is shown above the
+    // machine: it is not a detail that belongs under the panel.
+    this.banner = element('div', 'notice');
+    this.banner.setAttribute('role', 'alert');
+    this.banner.hidden = true;
+    const bannerTitle = element('strong', 'notice-title');
+    bannerTitle.textContent = 'The drum machine cannot run here';
+    this.bannerText = element('p', 'notice-text');
+    this.banner.append(bannerTitle, this.bannerText);
+    this.root.append(this.banner);
+
     const unit = element('div', 'unit');
     const cabinet = element('div', 'cabinet');
     const deck = element('div', 'deck');
@@ -336,7 +359,13 @@ export class Panel {
 
     this.status = element('p', 'status');
     this.status.setAttribute('role', 'status');
+    this.statusText = element('span', 'status-text');
+    this.status.append(this.statusText);
     this.root.append(this.status);
+
+    // The printed card sits under the machine and shows the pattern the
+    // engine is playing.
+    this.card = new PatternGrid(engine, this.root);
 
     host.append(this.root);
 
@@ -352,9 +381,23 @@ export class Panel {
     this.startStop = this.root.querySelector<HTMLButtonElement>('.start-stop')!;
 
     this.wireEvents();
+    this.renderSelection();
     engine.onPanel((state) => this.render(state));
-    engine.onError((message) => this.showStatus(message, true));
+    engine.onError((message) => {
+      this.showStatus(message, true);
+      const failure = this.engine.unavailable;
+      if (failure !== null) {
+        this.showBanner(failure);
+      }
+    });
     this.showStatus('Press START to play', false);
+
+    // A browser or an address that can never play is reported before
+    // anything is pressed.
+    const unavailable = engine.unavailable;
+    if (unavailable !== null) {
+      this.showBanner(unavailable);
+    }
   }
 
   private buildTopControls(): HTMLElement {
@@ -544,7 +587,7 @@ export class Panel {
   private wireEvents(): void {
     this.bankSwitch.addEventListener('click', () => {
       const bank: Bank = this.displayedBank() === 0 ? 1 : 0;
-      this.engine.select(bank, this.displayedButtons());
+      this.requestSelection(bank, this.displayedButtons());
     });
 
     this.startStop.addEventListener('click', () => {
@@ -569,14 +612,30 @@ export class Panel {
 
   private toggleRhythm(index: number): void {
     const mask = this.displayedButtons() ^ (1 << index);
-    this.engine.select(this.displayedBank(), mask);
+    this.requestSelection(this.displayedBank(), mask);
+  }
+
+  /**
+   * Latch a selection. The panel shows it immediately, so the key lights
+   * up on the click and not a round trip later.
+   */
+  private requestSelection(bank: Bank, buttons: number): void {
+    this.requested = { bank, buttons };
+    this.renderSelection();
+    this.engine.select(bank, buttons);
   }
 
   private displayedBank(): Bank {
+    if (this.requested !== null) {
+      return this.requested.bank;
+    }
     return this.state.pending ? this.state.pendingBank : this.state.bank;
   }
 
   private displayedButtons(): number {
+    if (this.requested !== null) {
+      return this.requested.buttons;
+    }
     return this.state.pending ? this.state.pendingButtons : this.state.buttons;
   }
 
@@ -584,26 +643,22 @@ export class Panel {
     const wasRunning = this.state.running;
     this.state = state;
 
-    const bank = this.displayedBank();
-    const buttons = this.displayedButtons();
+    // The engine has caught up with the request when it reports the same
+    // selection; from then on the panel follows the engine again.
+    if (this.requested !== null) {
+      const engineBank = state.pending ? state.pendingBank : state.bank;
+      const engineButtons = state.pending ? state.pendingButtons : state.buttons;
+      if (
+        engineBank === this.requested.bank &&
+        engineButtons === this.requested.buttons
+      ) {
+        this.requested = null;
+      }
+    }
 
-    this.rhythmSection.dataset.bank = String(bank);
+    this.card.update(state);
+    this.renderSelection();
 
-    this.keyButtons.forEach((button, index) => {
-      const latched = (buttons & (1 << index)) !== 0;
-      button.setAttribute('aria-pressed', latched ? 'true' : 'false');
-    });
-
-    this.legendNames.forEach((row, rowIndex) => {
-      row.forEach((name, index) => {
-        const latched = rowIndex === bank && (buttons & (1 << index)) !== 0;
-        name.classList.toggle('is-selected', latched);
-      });
-    });
-
-    this.legendRows[0]?.classList.toggle('active', bank === 0);
-    this.legendRows[1]?.classList.toggle('active', bank === 1);
-    this.bankSwitch.setAttribute('aria-checked', bank === 1 ? 'true' : 'false');
     this.startStop.setAttribute('aria-pressed', state.running ? 'true' : 'false');
 
     if (!state.running) {
@@ -628,6 +683,30 @@ export class Panel {
     }
   }
 
+  /** The bank lever, the latched keys and the printed legend. */
+  private renderSelection(): void {
+    const bank = this.displayedBank();
+    const buttons = this.displayedButtons();
+
+    this.rhythmSection.dataset.bank = String(bank);
+
+    this.keyButtons.forEach((button, index) => {
+      const latched = (buttons & (1 << index)) !== 0;
+      button.setAttribute('aria-pressed', latched ? 'true' : 'false');
+    });
+
+    this.legendNames.forEach((row, rowIndex) => {
+      row.forEach((name, index) => {
+        const latched = rowIndex === bank && (buttons & (1 << index)) !== 0;
+        name.classList.toggle('is-selected', latched);
+      });
+    });
+
+    this.legendRows[0]?.classList.toggle('active', bank === 0);
+    this.legendRows[1]?.classList.toggle('active', bank === 1);
+    this.bankSwitch.setAttribute('aria-checked', bank === 1 ? 'true' : 'false');
+  }
+
   private flash(bank: Bank): void {
     this.clearFlash();
     this.setLamps(bank);
@@ -650,7 +729,14 @@ export class Panel {
   }
 
   private showStatus(message: string, error: boolean): void {
-    this.status.textContent = message;
+    this.statusText.textContent = message;
     this.status.classList.toggle('error', error);
+    // A failure needs to be announced; the running state does not.
+    this.status.setAttribute('role', error ? 'alert' : 'status');
+  }
+
+  private showBanner(message: string): void {
+    this.bannerText.textContent = message;
+    this.banner.hidden = false;
   }
 }

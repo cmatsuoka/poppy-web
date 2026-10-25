@@ -910,21 +910,38 @@ body {
     linear-gradient(#fffef7 0%, #f6f1e5 46%, #e1dbcc 100%);
 }
 
+/* The key dips while the pointer is on it, even when it is not latched. */
+.rhythm-key:not([aria-pressed='true']):active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 #a29c8f,
+    0 2px 4px rgb(0 0 0 / 32%),
+    inset 0 1px 0 #fffef8;
+}
+
+/* A latched key is lit from behind and sits lower than the keys around
+   it, the way the hardware shows a rhythm that belongs to the selection. */
 .rhythm-key[aria-pressed='true'] {
   transform: translateY(5px);
-  background: linear-gradient(#b4ae9d 0%, #bcb6a5 62%, #a8a291 100%);
+  background:
+    radial-gradient(120% 105% at 50% 118%, rgb(255 208 128 / 90%), transparent 74%),
+    linear-gradient(#f7e8c6 0%, #ecd9ac 58%, #dcc596 100%);
   box-shadow:
     0 1px 0 #7d7869,
     0 2px 3px rgb(0 0 0 / 35%),
-    inset 0 6px 10px rgb(0 0 0 / 40%);
+    0 0 15px 2px rgb(255 176 84 / 50%),
+    inset 0 5px 9px rgb(120 80 30 / 32%);
+  color: #6a5a38;
 }
 
 .rhythm-key[aria-pressed='true']::before {
   transform: translateX(-50%) translateY(-5px);
+  border-bottom-color: rgb(35 35 42 / 60%);
 }
 
 .rhythm-key[aria-pressed='true'] .key-tick {
   opacity: 1;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 45%);
 }
 
 .rhythm-key:focus-visible {
@@ -1025,8 +1042,200 @@ body {
   transition: color 150ms linear;
 }
 
+/* A failure is worth a readable chip, not a line of small print. */
 .status.error {
   color: #e09582;
+}
+
+.status.error .status-text {
+  display: inline-block;
+  max-width: 46em;
+  padding: 0.4em 0.9em;
+  border: 1px solid rgb(224 149 130 / 40%);
+  border-radius: 3px;
+  background: rgb(224 149 130 / 12%);
+  font-size: clamp(11px, 1.05vw, 13.5px);
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+}
+
+/* A problem that keeps the engine from running is shown above the
+   machine, where it cannot be missed. */
+.notice {
+  margin: 0 0 clamp(12px, 1.8vw, 22px);
+  padding: clamp(9px, 1.1vw, 15px) clamp(12px, 1.5vw, 20px);
+  border: 1px solid rgb(224 149 130 / 50%);
+  border-left: 4px solid #e09582;
+  border-radius: 3px;
+  background: linear-gradient(rgb(224 149 130 / 16%), rgb(224 149 130 / 7%));
+  color: #f2b7a5;
+  text-align: left;
+}
+
+.notice-title {
+  display: block;
+  margin-bottom: 0.3em;
+  font-size: clamp(11px, 1.05vw, 14px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffd0c0;
+}
+
+.notice-text {
+  margin: 0;
+  font-size: clamp(11px, 1.05vw, 14px);
+  line-height: 1.5;
+}
+
+/* The printed pattern card under the machine. It shows the pattern the
+   engine is playing; it is a display, not an editor. */
+.pattern-card {
+  margin: clamp(14px, 2.2vw, 28px) 0 0;
+  padding: clamp(8px, 1.1vw, 14px) clamp(10px, 1.4vw, 18px)
+    clamp(6px, 0.9vw, 11px);
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(
+      92deg,
+      rgb(120 110 90 / 4%) 0 1px,
+      transparent 1px 4px
+    ),
+    linear-gradient(160deg, #efece1 0%, #e4e0d2 58%, #d8d3c3 100%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 35%),
+    0 10px 22px rgb(0 0 0 / 45%);
+  color: var(--ink);
+}
+
+.pattern-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(6px, 1vw, 14px);
+  padding-bottom: clamp(4px, 0.6vw, 8px);
+  border-bottom: 1px solid rgb(35 35 42 / 22%);
+}
+
+.pattern-card-title {
+  font-size: clamp(7px, 0.68vw, 9.5px);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.pattern-card-names {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: clamp(4px, 0.7vw, 9px);
+  min-width: 0;
+  font-size: clamp(9px, 0.95vw, 13px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pattern-name--a {
+  color: var(--ink);
+}
+
+.pattern-name--b {
+  color: var(--red-ink);
+}
+
+.pattern-name--pending {
+  font-weight: 700;
+  font-size: 0.8em;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
+
+.pattern-card-meta {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.6vw, 8px);
+  font-size: clamp(6.5px, 0.62vw, 9px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.pattern-bank {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 2px;
+  background: var(--ink);
+  color: #f4f2ec;
+  font-size: 0.95em;
+}
+
+.pattern-flag {
+  padding: 1px 4px;
+  border: 1px solid rgb(35 35 42 / 28%);
+  border-radius: 2px;
+  opacity: 0.75;
+}
+
+.pattern-card-body {
+  padding-top: clamp(5px, 0.7vw, 9px);
+  overflow: hidden;
+}
+
+.pattern-grid {
+  display: block;
+  overflow: visible;
+}
+
+.pattern-grid-off {
+  fill: rgb(35 35 42 / 7%);
+}
+
+.pattern-grid-guide {
+  stroke: rgb(35 35 42 / 12%);
+  stroke-width: 1;
+}
+
+.pattern-grid-rule {
+  stroke: rgb(35 35 42 / 30%);
+  stroke-width: 1;
+}
+
+.pattern-grid-hit {
+  fill: var(--ink);
+}
+
+.pattern-grid-hit--perc {
+  fill: #2f6a8c;
+}
+
+.pattern-grid-label {
+  fill: rgb(35 35 42 / 72%);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pattern-playhead {
+  fill: var(--red-ink);
+  opacity: 0.85;
+}
+
+.pattern-card-state {
+  margin: clamp(4px, 0.6vw, 8px) 0 0;
+  font-size: clamp(7px, 0.68vw, 9.5px);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.8;
 }
 
 .footnote {
@@ -1148,6 +1357,10 @@ body {
 
   .rhythm-key {
     border-radius: 2px 2px 4px 4px;
+  }
+
+  .pattern-grid-label {
+    font-size: 6px;
   }
 }
 
