@@ -76,9 +76,6 @@ class Fader {
     this.element.setAttribute('aria-valuemin', '0');
     this.element.setAttribute('aria-valuemax', '100');
 
-    const scale = element('div', 'fader-scale');
-    scale.setAttribute('aria-hidden', 'true');
-
     if (scaleSide === 'right' || scaleSide === 'left') {
       const digits = element('div', 'fader-digits');
       digits.setAttribute('aria-hidden', 'true');
@@ -96,7 +93,7 @@ class Fader {
     this.travel.append(slot, this.cap);
 
     const name = element('span', 'fader-name', options.label);
-    this.element.append(this.travel, scale, name);
+    this.element.append(this.travel, name);
 
     this.element.addEventListener('pointerdown', (event) => {
       this.element.setPointerCapture(event.pointerId);

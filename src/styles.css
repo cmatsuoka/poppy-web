@@ -221,111 +221,75 @@ body {
   position: relative;
   display: grid;
   grid-template-rows: minmax(80px, 1fr) auto;
+  grid-template-columns: var(--band) 18px var(--band);
   height: clamp(112px, 12.6vw, 162px);
   cursor: pointer;
   touch-action: none;
   user-select: none;
   outline: none;
-  --comb-left: clamp(16px, 1.7vw, 22px);
-  --comb-right: clamp(16px, 1.7vw, 22px);
+  /* The printed comb scale: the same band on both sides of every slot, so
+     every slider sits in the middle of its lines. */
+  --band: clamp(18px, 2.9vw, 34px);
   --digit-width: clamp(16px, 1.7vw, 22px);
-  /* The band that trails the last slider of a group carries shorter
-     lines than the band between the sliders. */
-  --comb-tail: clamp(20px, 2.2vw, 28px);
+  --digit-size: clamp(9px, 0.85vw, 12px);
 }
 
-/* The volume fader reads the numbers on its left: the band of the second
-   group starts at the number column, which is printed a little away from
-   the slot. Its comb is handed over to the balance fader, which is spaced
-   further out so the two bands stay separate. */
-.fader--left {
-  --comb-left: clamp(26px, 2.8vw, 36px);
-  --comb-right: clamp(30px, 3.2vw, 40px);
-}
-
+/* The band of the master group is interrupted between volume and
+   balance, so the balance fader is spaced further out. */
 .fader--pair-end {
-  --comb-left: clamp(30px, 3.2vw, 40px);
-  --comb-right: var(--comb-tail);
   margin-left: clamp(16px, 1.8vw, 24px);
 }
 
-.fader--end {
-  --comb-right: var(--comb-tail);
-}
-
-.fader--right {
-  grid-template-columns: var(--comb-left) minmax(18px, 26px) var(--comb-right)
-    var(--digit-width);
-}
-
-.fader--right .fader-travel {
-  grid-column: 2;
-}
-
-.fader--right .fader-scale {
-  grid-column: 3;
-}
-
-.fader--right .fader-digits {
-  grid-column: 4;
-}
-
-.fader--right .fader-name {
-  grid-column: 2;
-}
-
-.fader--left {
-  grid-template-columns: var(--digit-width) var(--comb-left) minmax(18px, 26px)
-    var(--comb-right);
-}
-
-.fader--left .fader-digits {
-  grid-column: 1;
-}
-
-.fader--left .fader-travel {
-  grid-column: 3;
-}
-
-.fader--left .fader-scale {
-  grid-column: 4;
-}
-
-.fader--left .fader-name {
-  grid-column: 3;
-}
-
-.fader--none,
-.fader--end,
-.fader--pair-end {
-  grid-template-columns: var(--comb-left) minmax(18px, 26px) var(--comb-right);
-}
-
-.fader--none .fader-travel,
-.fader--end .fader-travel,
-.fader--pair-end .fader-travel {
-  grid-column: 2;
-}
-
-.fader--none .fader-scale,
-.fader--end .fader-scale,
-.fader--pair-end .fader-scale {
-  grid-column: 3;
-}
-
-.fader--none .fader-name,
-.fader--end .fader-name,
-.fader--pair-end .fader-name {
-  grid-column: 2;
-}
-
-.fader-scale {
+.fader-travel {
+  position: relative;
   grid-row: 1;
+  grid-column: 2;
+  width: 100%;
+  height: 100%;
+}
+
+/* The printed comb scale runs on both sides of the slot and continues
+   behind it, as on the original panel. The lines are unit divisions of
+   the 0..10 scale, so eleven of them are printed from 0 up to 10. */
+.fader-travel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--band));
+  right: calc(-1 * var(--band));
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(35 35 42 / 30%) 0 1px,
+    transparent 1px calc((100% - 1px) / 10)
+  );
+  pointer-events: none;
 }
 
 .fader-digits {
   position: relative;
+  /* The numbers are printed on the lines, so they have to sit above the
+     band that runs through them. */
+  z-index: 1;
   grid-row: 1;
+  width: var(--digit-width);
+}
+
+/* The number column stands on the end of the band: the lines run on
+   through it and the number only breaks the line it is printed on. In
+   the trio it stands on the right, in the middle of the gap between two
+   sliders; in the master group it stands on the left, where the band of
+   the group starts. */
+.fader--right .fader-digits {
+  grid-column: 3;
+  justify-self: end;
+  transform: translateX(50%);
+}
+
+.fader--left .fader-digits {
+  grid-column: 1;
+  justify-self: start;
+  transform: translateX(-50%);
 }
 
 /* The comb band runs on through the number column, as on the original
@@ -347,29 +311,14 @@ body {
 
 .fader-tick {
   position: absolute;
-  right: 0;
-  transform: translateY(-50%);
-  font-size: clamp(7px, 0.66vw, 9.5px);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--digit-size);
   color: var(--ink-soft);
   opacity: 0.9;
   /* The stroke knocks the comb line out around the glyph. */
   -webkit-text-stroke: 2px #e6e8e9;
   paint-order: stroke fill;
-}
-
-/* In the trio the numbers sit in the middle of the gap between two
-   sliders. */
-.fader--right .fader-tick {
-  right: auto;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-/* In the second group the band starts at the numbers, so they are printed
-   at the left end of their column. */
-.fader--left .fader-tick {
-  right: auto;
-  left: 0;
 }
 
 .tick-10 {
@@ -383,32 +332,6 @@ body {
 .tick-0 {
   top: 100%;
 }
-
-.fader-travel {
-  position: relative;
-  grid-row: 1;
-  width: 100%;
-  height: 100%;
-}
-
-/* The printed comb scale runs on both sides of the slot and continues
-   behind it, as on the original panel. The lines are unit divisions of
-   the 0..10 scale, so eleven of them are printed from 0 up to 10. */
-.fader-travel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(-1 * var(--comb-left));
-  right: calc(-1 * var(--comb-right));
-  background: repeating-linear-gradient(
-    to bottom,
-    rgb(35 35 42 / 30%) 0 1px,
-    transparent 1px calc((100% - 1px) / 10)
-  );
-  pointer-events: none;
-}
-
 .fader-slot {
   position: absolute;
   left: 50%;
@@ -486,6 +409,7 @@ body {
 
 .fader-name {
   grid-row: 2;
+  grid-column: 2;
   justify-self: center;
   padding-top: clamp(4px, 0.6vw, 8px);
   text-align: center;
@@ -1364,18 +1288,9 @@ body {
   }
 
   .fader {
-    --comb-left: 14px;
-    --comb-right: 14px;
+    --band: 20px;
     --digit-width: 16px;
-    --comb-tail: 18px;
-  }
-
-  .fader--left {
-    --comb-right: 24px;
-  }
-
-  .fader--pair-end {
-    --comb-left: 24px;
+    --digit-size: 9px;
   }
   .faceplate {
     padding-left: 12px;
