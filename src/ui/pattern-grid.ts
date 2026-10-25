@@ -171,12 +171,15 @@ export class PatternGrid {
       ? rhythmsFor(state.pendingBank, state.pendingButtons)
       : [];
 
+    const bankChanged = this.bank !== state.bank;
     this.bank = state.bank;
 
     if (!sameRhythms(applied, this.applied)) {
       this.applied = applied;
       this.requestViews(applied);
       this.rebuild();
+    } else if (bankChanged) {
+      this.updateMeta();
     }
 
     if (!sameRhythms(pending, this.pending)) {

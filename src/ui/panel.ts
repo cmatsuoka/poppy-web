@@ -55,6 +55,7 @@ function clamp(value: number, min: number, max: number): number {
 
 interface FaderOptions {
   label: string;
+  ariaLabel?: string;
   color: 'blue' | 'yellow';
   value: number;
   onInput: (value: number) => void;
@@ -82,7 +83,10 @@ class Fader {
     this.element.tabIndex = 0;
     this.element.setAttribute('role', 'slider');
     this.element.setAttribute('aria-orientation', 'vertical');
-    this.element.setAttribute('aria-label', `${options.label} volume`);
+    this.element.setAttribute(
+      'aria-label',
+      options.ariaLabel ?? `${options.label} volume`,
+    );
     this.element.setAttribute('aria-valuemin', '0');
     this.element.setAttribute('aria-valuemax', '100');
 
@@ -313,7 +317,6 @@ class Knob {
     this.dial.setAttribute('aria-valuenow', String(this.value));
     this.dial.setAttribute('aria-valuetext', `${this.value} beats per minute`);
     this.readout.value = `${this.value} BPM`;
-    this.readout.textContent = `${this.value} BPM`;
   }
 }
 
@@ -402,8 +405,6 @@ export class Panel {
       this.root.querySelector<HTMLElement>('.lamp-a')!,
       this.root.querySelector<HTMLElement>('.lamp-b')!,
     ];
-    this.bankSwitch = this.root.querySelector<HTMLButtonElement>('.bank-switch')!;
-    this.startStop = this.root.querySelector<HTMLButtonElement>('.start-stop')!;
 
     this.wireEvents();
     this.renderSelection();
@@ -442,6 +443,7 @@ export class Panel {
     const faderBank = element('div', 'fader-bank');
     const faderDefs: Array<{
       label: string;
+      ariaLabel?: string;
       color: 'blue' | 'yellow';
       value: number;
       instrument?: number;
@@ -473,9 +475,17 @@ export class Panel {
         scale: 'end',
       },
       // The scale column on the volume fader is shared by the pair.
-      { label: 'Volume', color: 'yellow', value: 50, target: 'volume', scale: 'left' },
+      {
+        label: 'Volume',
+        ariaLabel: 'Master volume',
+        color: 'yellow',
+        value: 50,
+        target: 'volume',
+        scale: 'left',
+      },
       {
         label: 'Balance',
+        ariaLabel: 'Balance',
         color: 'yellow',
         value: 50,
         target: 'balance',
@@ -487,6 +497,7 @@ export class Panel {
     for (const definition of faderDefs) {
       const fader = new Fader({
         label: definition.label,
+        ariaLabel: definition.ariaLabel,
         color: definition.color,
         value: definition.value,
         scale: definition.scale,

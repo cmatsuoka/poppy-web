@@ -204,13 +204,15 @@ class PoppyProcessor extends AudioWorkletProcessor {
    * Take over the engine the runtime has just started.
    */
   private attach(module: PoppyModule): void {
-    this.module = module;
-    this.context = module._poppy_create(sampleRate);
-    if (this.context === 0) {
+    const context = module._poppy_create(sampleRate);
+    if (context === 0) {
+      this.queue.length = 0;
       this.emit({ type: 'error', message: 'could not allocate the engine context' });
       return;
     }
 
+    this.context = context;
+    this.module = module;
     this.outPtr = module._malloc(BLOCK_FRAMES * 2 * Int16Array.BYTES_PER_ELEMENT);
     this.samples = new Int16Array(
       module.HEAPU8.buffer,
