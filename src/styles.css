@@ -1207,7 +1207,9 @@ body {
 
 .pattern-playhead {
   fill: var(--red-ink);
-  opacity: 0.85;
+  /* fill-opacity, not opacity: the card shows and hides the cursor with
+     the SVG `opacity` attribute, and a CSS `opacity` would win over it. */
+  fill-opacity: 0.85;
 }
 
 .pattern-card-state {
