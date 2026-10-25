@@ -5,17 +5,6 @@ engine is [libpoppy](https://github.com/cmatsuoka/libpoppy), a small
 integer-only C library compiled to WebAssembly. Audio is generated entirely
 by libpoppy, no samples are used.
 
-The panel reproduces the hardware: rhythm keys with the printed A/B
-legends, the bank lever, the tempo knob, the five faders, the start/stop
-switch and the two pilot lamps. Under the machine a printed pattern card
-shows the factory pattern of the selected rhythm together with a playhead
-that follows the engine's grid.
-
-A rhythm key latches when it is pressed. A click picks that rhythm on its
-own, and clicking a latched key releases all of them; holding a key down
-adds it to the selection, and holding a latched key takes just that one
-out again.
-
 ## Run it
 
 Requirements: Node 20+, npm, and Emscripten (`emcc`) on `PATH` for the
