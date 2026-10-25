@@ -902,6 +902,23 @@ body {
   box-shadow: 0 1px 2px rgb(0 0 0 / 45%);
 }
 
+/* A key whose selection waits for the end of the cycle pulses until its
+   pattern starts. The marker keeps its colour and only fades. */
+@keyframes key-tick-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.rhythm-key[aria-pressed='true'].is-pending .key-tick {
+  animation: key-tick-pulse 1.8s ease-in-out infinite;
+}
+
 .rhythm-key:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -1346,5 +1363,12 @@ body {
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+
+  /* A waiting marker does not pulse without motion: it stays dimmed, so
+     it still reads as a selection that has not started yet. */
+  .rhythm-key[aria-pressed='true'].is-pending .key-tick {
+    animation: none;
+    opacity: 0.45;
   }
 }

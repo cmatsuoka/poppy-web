@@ -1,10 +1,11 @@
 import type { PoppyEngine } from '../audio/engine';
 import {
+  RHYTHM_BUTTON_COUNT,
   RHYTHM_NAMES,
   type Bank,
   type PanelState,
 } from '../audio/protocol';
-import { PatternGrid } from './pattern-grid';
+import { PatternGrid, rhythmsFor } from './pattern-grid';
 
 const Q16 = 65536;
 
@@ -800,6 +801,29 @@ export class Panel {
     return this.state.pending ? this.state.pendingButtons : this.state.buttons;
   }
 
+  /**
+   * The keys whose selection the engine has not taken over yet.
+   *
+   * While the transport runs, a new selection waits for the end of the
+   * cycle, so the marker of a key that is still waiting pulses until the
+   * pattern it belongs to starts. A stopped transport takes the selection
+   * at once, and then nothing waits.
+   */
+  private pendingKeys(): Set<number> {
+    const pending = new Set<number>();
+    if (!this.state.running) {
+      return pending;
+    }
+    const applied = new Set(rhythmsFor(this.state.bank, this.state.buttons));
+    const shown = rhythmsFor(this.displayedBank(), this.displayedButtons());
+    for (const rhythm of shown) {
+      if (!applied.has(rhythm)) {
+        pending.add(rhythm % RHYTHM_BUTTON_COUNT);
+      }
+    }
+    return pending;
+  }
+
   private render(state: PanelState): void {
     const wasRunning = this.state.running;
     this.state = state;
@@ -850,12 +874,16 @@ export class Panel {
   private renderSelection(): void {
     const bank = this.displayedBank();
     const buttons = this.displayedButtons();
+    const pending = this.pendingKeys();
 
     this.rhythmSection.dataset.bank = String(bank);
 
     this.keyButtons.forEach((button, index) => {
       const latched = (buttons & (1 << index)) !== 0;
       button.setAttribute('aria-pressed', latched ? 'true' : 'false');
+      // A key that waits for the end of the cycle pulses until the pattern
+      // it belongs to is the one that plays.
+      button.classList.toggle('is-pending', latched && pending.has(index));
     });
 
     this.legendNames.forEach((row, rowIndex) => {
