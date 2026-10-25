@@ -32,6 +32,10 @@ body {
   margin: 0;
   padding: clamp(12px, 3vw, 44px);
   display: grid;
+  /* The column takes the width of the page and not the width the
+     machine asks for: a page that is too narrow for the machine is
+     scaled down to fit, it does not make the page wider. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   background:
     radial-gradient(ellipse at 50% 12%, #313936 0%, #1a1f1d 42%, #0d100f 78%),
@@ -44,6 +48,7 @@ body {
 #app {
   width: 100%;
   max-width: 1020px;
+  min-width: 0;
 }
 
 .stage {
@@ -52,6 +57,11 @@ body {
 
 .unit {
   filter: drop-shadow(0 34px 44px rgb(0 0 0 / 55%));
+  /* The machine is scaled down as one piece when the viewport has no
+     room for it. The shift keeps it in the middle of the page, and the
+     space the scaling frees is taken out of the page below it. */
+  transform: translateX(var(--unit-shift, 0px)) scale(var(--unit-scale, 1));
+  transform-origin: top left;
 }
 
 .cabinet {
@@ -1344,7 +1354,11 @@ body {
   text-decoration: underline;
 }
 
-@media (max-width: 900px) {
+/* Below 900px the panel no longer fits in one row, so the controls are
+   stacked. A phone in landscape is the exception: the wide shape of the
+   hardware is the one that belongs there, and it is scaled down to fit
+   instead of being taken apart. */
+@media (max-width: 900px) and (orientation: portrait) {
   .top-controls {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
@@ -1390,7 +1404,19 @@ body {
   }
 }
 
-@media (max-width: 560px) {
+/* A phone in landscape has little height to spare, so the page around
+   the machine is kept thin and the machine is scaled to fit what is
+   left of it. */
+@media (orientation: landscape) and (max-height: 620px) {
+  body {
+    padding: clamp(6px, 1.6vh, 16px);
+  }
+}
+
+/* The narrow layout is for a phone held upright: the machine is wider
+   than the page, and the page scrolls sideways under it. Held sideways,
+   the wide shape of the hardware is scaled down to fit instead. */
+@media (max-width: 560px) and (orientation: portrait) {
   body {
     display: block;
     overflow-x: auto;

@@ -6,6 +6,7 @@ import {
   type Bank,
   type PanelState,
 } from '../audio/protocol';
+import { FitScaler } from './fit';
 import { PatternGrid, rhythmsFor } from './pattern-grid';
 
 const Q16 = 65536;
@@ -293,7 +294,9 @@ class Knob {
       if (!this.dial.hasPointerCapture(event.pointerId)) {
         return;
       }
-      const delta = (dragStartY - event.clientY) * 0.85;
+      // The knob turns with the finger, so the drag is measured in the
+      // size the knob is seen at, not in the size it is laid out in.
+      const delta = (dragStartY - event.clientY) / this.scale() * 0.85;
       this.set(dragStartValue + delta, true);
     });
     this.dial.addEventListener('pointerup', (event) => {
@@ -345,6 +348,19 @@ class Knob {
     }
   }
 
+  /**
+   * How much the knob is scaled down. The machine is scaled as a whole
+   * when the viewport is too small for it, and a drag over the scaled
+   * knob has to cover as much ground as a drag over the knob itself.
+   */
+  private scale(): number {
+    const width = this.dial.offsetWidth;
+    if (width === 0) {
+      return 1;
+    }
+    return this.dial.getBoundingClientRect().width / width;
+  }
+
   private render(): void {
     const ratio = (this.value - this.min) / (this.max - this.min);
     this.base.style.setProperty('--angle', `${-135 + ratio * 270}deg`);
@@ -370,6 +386,7 @@ export class Panel {
   private readonly banner: HTMLDivElement;
   private readonly bannerText: HTMLParagraphElement;
   private readonly card: PatternGrid;
+  private readonly fitter: FitScaler;
 
   private state: PanelState = { ...INITIAL_PANEL_STATE };
 
@@ -431,6 +448,10 @@ export class Panel {
     this.card = new PatternGrid(engine, this.root);
 
     host.append(this.root);
+
+    // The machine is scaled down when the viewport is too small for it.
+    this.fitter = new FitScaler(unit, [this.banner, this.status]);
+    this.fitter.fit();
 
     for (const fader of this.faders) {
       fader.observe();
