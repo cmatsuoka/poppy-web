@@ -9,16 +9,23 @@
 
 interface WorkletScope {
   self?: unknown;
+  window?: unknown;
   location?: { href: string };
   importScripts?: (...urls: string[]) => void;
 }
 
 const scope = globalThis as unknown as WorkletScope;
 
-// The worker code path of the Emscripten runtime reads `self.location`, so
-// the global object has to stand in for `self`.
+// The Emscripten runtime picks its environment by probing `self`, `window`
+// and `WorkerGlobalScope`. An AudioWorkletGlobalScope has none of them, so
+// the global object stands in for both `self` and `window`. `location` and
+// `importScripts` are also missing and have to be supplied inert stand-ins.
 if (scope.self === undefined) {
   scope.self = scope;
+}
+
+if (scope.window === undefined) {
+  scope.window = scope;
 }
 
 if (scope.location === undefined) {
