@@ -994,12 +994,19 @@ body {
    keybed. */
 .start-stop {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  /* The two legends share one column: START stays centred, STOP hangs
+     from its left edge. */
+  display: grid;
+  grid-template-columns: max-content;
+  justify-content: center;
+  align-content: end;
+  gap: 1px;
   height: clamp(34px, 4vw, 48px);
   padding: 4px 6px 5px;
+  --legend-size: clamp(6px, 0.58vw, 8.5px);
+  --legend-line: calc(var(--legend-size) * 1.2);
+  /* The block the two legends occupy at the bottom of the face. */
+  --legend-block: calc(var(--legend-line) * 2 + 1px);
   border: 1px solid #3a3a33;
   border-radius: 3px 3px 4px 4px;
   background:
@@ -1054,7 +1061,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  font-size: clamp(6px, 0.58vw, 8.5px);
+  font-size: var(--legend-size, clamp(6px, 0.58vw, 8.5px));
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.1em;
@@ -1062,7 +1069,21 @@ body {
   text-shadow: 0 1px 1px rgb(0 0 0 / 60%);
 }
 
+.start-label {
+  justify-self: center;
+}
+
+.stop-label {
+  justify-self: start;
+}
+
+/* The pilot lamp sits above the two legends, in the same column, halfway
+   between the top of the face and the text below it. */
 .run-led {
+  position: absolute;
+  top: calc(50% - 4px - var(--legend-block) / 2);
+  left: 50%;
+  transform: translateX(-50%);
   width: 5px;
   height: 5px;
   border-radius: 50%;

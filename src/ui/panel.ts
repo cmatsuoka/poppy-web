@@ -613,12 +613,11 @@ export class Panel {
     this.startStop.type = 'button';
     this.startStop.setAttribute('aria-pressed', 'false');
     this.startStop.setAttribute('aria-label', 'Start or stop rhythm');
-    const startLabel = element('span', 'start-label');
+    const startLabel = element('span', 'start-label', 'START');
     const runLed = element('span', 'run-led');
     runLed.setAttribute('aria-hidden', 'true');
-    startLabel.append(runLed, document.createTextNode('START'));
     const stopLabel = element('span', 'stop-label', 'STOP');
-    this.startStop.append(startLabel, stopLabel);
+    this.startStop.append(runLed, startLabel, stopLabel);
     keys.append(this.startStop);
 
     const keybed = element('div', 'keybed');
