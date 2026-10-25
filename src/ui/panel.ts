@@ -8,6 +8,22 @@ import { PatternGrid } from './pattern-grid';
 
 const Q16 = 65536;
 
+/**
+ * How long a key has to be held down before the press counts as a long
+ * press. A short press picks a single rhythm, a long press adds to the
+ * selection.
+ */
+const LONG_PRESS_MS = 500;
+
+/** A key that is being held down. */
+interface KeyPress {
+  index: number;
+  /** The long press has already been carried out. */
+  long: boolean;
+  source: 'pointer' | 'key';
+  timer: ReturnType<typeof setTimeout>;
+}
+
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -325,6 +341,11 @@ export class Panel {
   // selection; until then it also covers an engine that never answers.
   private requested: { bank: Bank; buttons: number } | null = null;
 
+  // The rhythm key that is being held down, and the keyboard click that
+  // must not be carried out twice.
+  private press: KeyPress | null = null;
+  private keyboardHandled = false;
+
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private lastFlash = -1;
   private readonly reducedMotion = window.matchMedia(
@@ -548,7 +569,8 @@ export class Panel {
     this.legendRows.push(bankA, bankB);
 
     const keys = element('div', 'rhythm-keys');
-    keys.title = 'Click rhythms to latch them; several can play together.';
+    keys.title =
+      'Click a rhythm to select it on its own, hold it down to add it to the selection.';
     for (let index = 0; index < 10; index += 1) {
       const button = element('button', 'rhythm-key');
       button.type = 'button';
@@ -559,7 +581,21 @@ export class Panel {
       const tick = element('span', 'key-tick');
       tick.setAttribute('aria-hidden', 'true');
       button.append(tick);
-      button.addEventListener('click', () => this.toggleRhythm(index));
+      button.addEventListener('pointerdown', (event) =>
+        this.onKeyPointerDown(index, event),
+      );
+      button.addEventListener('pointerup', (event) =>
+        this.onKeyPointerUp(index, event),
+      );
+      button.addEventListener('pointercancel', () => this.cancelPress());
+      button.addEventListener('keydown', (event) =>
+        this.onKeyKeyDown(index, event),
+      );
+      button.addEventListener('keyup', (event) => this.onKeyKeyUp(index, event));
+      button.addEventListener('blur', () => this.cancelKeyPress());
+      button.addEventListener('click', (event) => this.onKeyClick(index, event));
+      // A long press on a touch screen must not open the context menu.
+      button.addEventListener('contextmenu', (event) => event.preventDefault());
       this.keyButtons.push(button);
       keys.append(button);
     }
@@ -585,6 +621,9 @@ export class Panel {
   }
 
   private wireEvents(): void {
+    // A press that ends outside the key is taken back.
+    document.addEventListener('pointerup', () => this.cancelPress());
+
     this.bankSwitch.addEventListener('click', () => {
       const bank: Bank = this.displayedBank() === 0 ? 1 : 0;
       this.requestSelection(bank, this.displayedButtons());
@@ -610,9 +649,132 @@ export class Panel {
     });
   }
 
-  private toggleRhythm(index: number): void {
-    const mask = this.displayedButtons() ^ (1 << index);
-    this.requestSelection(this.displayedBank(), mask);
+  /**
+   * A short press picks a single rhythm: the key that was pressed becomes
+   * the only latched one, and pressing a latched key releases them all.
+   */
+  private applyShortPress(index: number): void {
+    const buttons = this.displayedButtons();
+    const bit = 1 << index;
+    const next = (buttons & bit) !== 0 ? 0 : bit;
+    this.requestSelection(this.displayedBank(), next);
+  }
+
+  /**
+   * A long press works on the selection: the key joins it, or leaves it
+   * again, and the other keys keep their state.
+   */
+  private applyLongPress(index: number): void {
+    const buttons = this.displayedButtons();
+    const bit = 1 << index;
+    const next =
+      (buttons & bit) !== 0 ? buttons & ~bit : buttons | (1 << index);
+    this.requestSelection(this.displayedBank(), next);
+  }
+
+  private beginPress(index: number, source: 'pointer' | 'key'): void {
+    this.endPress();
+    const press: KeyPress = { index, long: false, source, timer: 0 };
+    press.timer = setTimeout(() => {
+      if (this.press !== press) {
+        return;
+      }
+      press.long = true;
+      this.applyLongPress(index);
+    }, LONG_PRESS_MS);
+    this.press = press;
+  }
+
+  private endPress(): void {
+    if (this.press === null) {
+      return;
+    }
+    clearTimeout(this.press.timer);
+    this.press = null;
+  }
+
+  /** A press that was taken back, for example when the pointer wandered off. */
+  private cancelPress(): void {
+    if (this.press?.source === 'pointer') {
+      this.endPress();
+    }
+  }
+
+  /**
+   * A key that loses the focus while it is held down gives the press back.
+   * Only a key press is taken back this way: a pointer press belongs to
+   * the key that is under the pointer, and the focus moves to that key
+   * while the press is already running.
+   */
+  private cancelKeyPress(): void {
+    if (this.press?.source === 'key') {
+      this.endPress();
+    }
+  }
+
+  private onKeyPointerDown(index: number, event: PointerEvent): void {
+    if (event.button !== 0 || !event.isPrimary) {
+      return;
+    }
+    this.keyboardHandled = false;
+    this.beginPress(index, 'pointer');
+  }
+
+  private onKeyPointerUp(index: number, event: PointerEvent): void {
+    const press = this.press;
+    if (press === null || press.source !== 'pointer' || press.index !== index) {
+      return;
+    }
+    this.endPress();
+    if (!press.long) {
+      this.applyShortPress(index);
+    }
+  }
+
+  private onKeyKeyDown(index: number, event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    if (event.repeat) {
+      return;
+    }
+    this.keyboardHandled = false;
+    this.beginPress(index, 'key');
+  }
+
+  private onKeyKeyUp(index: number, event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    const press = this.press;
+    if (press === null || press.source !== 'key' || press.index !== index) {
+      return;
+    }
+    this.endPress();
+    this.keyboardHandled = true;
+    if (!press.long) {
+      this.applyShortPress(index);
+    }
+  }
+
+  /**
+   * The click that follows a press. A click that comes from the mouse or
+   * from a touch screen was already handled by the pointer events; a click
+   * that the keyboard produced is handled here.
+   */
+  private onKeyClick(index: number, event: MouseEvent): void {
+    if (event.detail !== 0) {
+      return;
+    }
+    if (this.keyboardHandled) {
+      this.keyboardHandled = false;
+      return;
+    }
+    if (this.press?.source === 'key') {
+      // Enter produces its click while the key is still held down.
+      return;
+    }
+    this.applyShortPress(index);
   }
 
   /**

@@ -11,6 +11,11 @@ switch and the two pilot lamps. Under the machine a printed pattern card
 shows the factory pattern of the selected rhythm together with a playhead
 that follows the engine's grid.
 
+A rhythm key latches when it is pressed. A click picks that rhythm on its
+own, and clicking a latched key releases all of them; holding a key down
+adds it to the selection, and holding a latched key takes just that one
+out again.
+
 ## Run it
 
 Requirements: Node 20+, npm, and Emscripten (`emcc`) on `PATH` for the
