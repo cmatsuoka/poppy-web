@@ -675,18 +675,40 @@ body {
   background: var(--red-ink);
 }
 
+/* A pilot lamp is a black bezel with the lens inside it. The lens is the
+   only part that lights up: the glow is clipped by the bezel, so the ring
+   around it stays dark. */
 .lamp {
+  position: relative;
   justify-self: center;
-  width: clamp(18px, 1.9vw, 25px);
+  width: clamp(22px, 2.3vw, 30px);
   aspect-ratio: 1;
-  border: 2px solid #6f7477;
+  border: 3px solid #14161a;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 32%, #4c5052, #1c1c19 70%);
+  background: #0a0b0c;
   box-shadow:
-    inset 0 1px 2px rgb(0 0 0 / 80%),
-    0 0 0 1px rgb(255 255 255 / 40%),
-    0 1px 2px rgb(0 0 0 / 40%);
+    0 0 0 1px rgb(255 255 255 / 35%),
+    0 1px 2px rgb(0 0 0 / 45%);
+  overflow: hidden;
+}
+
+.lamp::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 80%);
   transition: background 90ms linear, box-shadow 90ms linear;
+}
+
+/* The lens keeps its colour when it is dark, so the lamp still reads as a
+   lamp and not as a hole in the panel. */
+.lamp-a::after {
+  background: radial-gradient(circle at 38% 32%, #2f4f55, #10262b 72%);
+}
+
+.lamp-b::after {
+  background: radial-gradient(circle at 38% 32%, #5c2f24, #2a120d 72%);
 }
 
 .lamp-a {
@@ -699,20 +721,18 @@ body {
   grid-row: 2;
 }
 
-.lamp-a.on {
+.lamp-a.on::after {
   background: radial-gradient(circle at 38% 32%, #c8f3ef, var(--lamp-a) 45%, #12383f 100%);
   box-shadow:
     0 0 7px rgb(86 191 197 / 75%),
-    inset 0 1px 2px rgb(255 255 255 / 55%),
-    0 0 0 1px rgb(255 255 255 / 40%);
+    inset 0 1px 2px rgb(255 255 255 / 55%);
 }
 
-.lamp-b.on {
+.lamp-b.on::after {
   background: radial-gradient(circle at 38% 32%, #ffcbb8, var(--lamp-b) 45%, #4d160e 100%);
   box-shadow:
     0 0 7px rgb(206 94 67 / 75%),
-    inset 0 1px 2px rgb(255 255 255 / 55%),
-    0 0 0 1px rgb(255 255 255 / 40%);
+    inset 0 1px 2px rgb(255 255 255 / 55%);
 }
 
 .bank-switch {

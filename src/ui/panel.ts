@@ -823,8 +823,10 @@ export class Panel {
     this.startStop.setAttribute('aria-pressed', state.running ? 'true' : 'false');
 
     if (!state.running) {
+      // Stopped, the lamps are dark: the bank is shown by the lever and
+      // by the legend, not by a burning lamp.
       this.clearFlash();
-      this.setLamps(state.bank);
+      this.setLamps(null);
     } else if (this.reducedMotion.matches) {
       this.clearFlash();
       this.setLamps(state.bank);
