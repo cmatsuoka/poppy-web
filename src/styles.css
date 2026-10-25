@@ -365,47 +365,49 @@ body {
   right: -4px;
 }
 
+/* The fader handle, seen from above: a flat chrome plate with the
+   coloured plastic recessed into a well in the middle of it. */
 .fader-cap {
   position: absolute;
   left: 50%;
-  width: clamp(34px, 3.6vw, 50px);
-  height: clamp(20px, 2.1vw, 28px);
+  width: clamp(36px, 3.8vw, 52px);
+  height: clamp(19px, 2.05vw, 27px);
   transform: translateX(-50%);
-  border-radius: 999px;
-  border: 1px solid #54524b;
+  border: 1px solid #8e9294;
+  border-radius: clamp(8px, 0.8vw, 11px);
   background: linear-gradient(
     180deg,
-    #fdfdf8 0%,
-    #e4e1d5 22%,
-    #b7b2a3 50%,
-    #878377 82%,
-    #beb9ab 100%
+    #fbfbfa 0%,
+    #e9ebeb 34%,
+    #d7dada 66%,
+    #c4c7c7 100%
   );
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 45%),
-    0 2px 4px rgb(0 0 0 / 50%),
-    inset 0 1px 1px rgb(255 255 255 / 90%),
-    inset 0 -2px 3px rgb(0 0 0 / 35%);
+    0 2px 3px rgb(0 0 0 / 45%),
+    0 4px 8px rgb(0 0 0 / 18%),
+    inset 0 1px 0 rgb(255 255 255 / 90%);
   pointer-events: none;
 }
 
+/* The well the coloured plastic sits in: the plate overhangs it, so the
+   top of the well is in shadow and its bottom edge catches the light. */
 .fader-cap::before {
   content: '';
   position: absolute;
-  inset: 3px 6px 38%;
-  border-radius: 999px;
+  inset: 4px 5px;
+  border-radius: clamp(5px, 0.55vw, 7px);
   box-shadow:
-    inset 0 2px 3px rgb(255 255 255 / 60%),
-    inset 0 -2px 4px rgb(0 0 0 / 55%),
-    0 0 1px rgb(0 0 0 / 40%);
+    inset 0 2px 3px rgb(0 0 0 / 50%),
+    inset 0 -1px 0 rgb(255 255 255 / 30%),
+    0 0 0 1px rgb(0 0 0 / 30%);
 }
 
 .fader-cap.blue::before {
-  background: linear-gradient(#8fb9d2, var(--blue-cap) 55%, #39627e);
+  background: linear-gradient(180deg, #2d6f9e 0%, #1f5b83 60%, #1a4d70 100%);
 }
 
 .fader-cap.yellow::before {
-  background: linear-gradient(#e6c95e, var(--yellow-cap) 55%, #8f6d12);
+  background: linear-gradient(180deg, #dfb32c 0%, #d2a81b 60%, #b78d13 100%);
 }
 
 /* The printed control names: the fader labels and the tempo name use
@@ -1405,7 +1407,7 @@ body {
   .fader {
     --band: 20px;
     --digit-width: 16px;
-    --digit-size: 9px;
+    --digit-size: 8px;
   }
   .faceplate {
     padding-left: 12px;
