@@ -701,31 +701,93 @@ body {
   width: 32px;
   height: 13px;
   margin: -6.5px 0 0 -9px;
-  border-radius: 3px 4px 4px 3px;
-  background: linear-gradient(180deg, #f8fafb, #c3c8cb 52%, #868b8e);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 55%);
+  border-radius: 2px 3px 3px 2px;
+  /* A chrome pipe: a hot band along the top, the dark band the horizon
+     leaves across the middle and the bounce light along the bottom. */
+  background: linear-gradient(
+    180deg,
+    #fdfefe 0%,
+    #eef1f2 8%,
+    #d2d8da 18%,
+    #a9b0b4 30%,
+    #858c90 44%,
+    #6b7175 58%,
+    #565c5f 68%,
+    #6f7578 78%,
+    #949a9d 90%,
+    #b9bfc2 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 90%),
+    inset 0 -1px 0 rgb(0 0 0 / 30%),
+    0 2px 4px rgb(0 0 0 / 45%);
   transform: translateY(-11px) rotate(-16deg);
   transition: transform 140ms ease;
   pointer-events: none;
+  /* The tail of the paddle is behind the panel: it fades out in the dark
+     of the slit instead of ending in the open. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, rgb(0 0 0 / 40%) 4px, #000 13px);
+  mask-image: linear-gradient(90deg, transparent 0, rgb(0 0 0 / 40%) 4px, #000 13px);
 }
 
+/* The end of the lever is a turned ball. Its shading is counter-rotated
+   with the paddle, so the light stays where the panel puts it. */
+.bank-arm::before {
+  content: '';
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  transform: translateY(-50%) rotate(16deg);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 40% 30%,
+    #ffffff 0%,
+    #f2f5f6 12%,
+    #d6dbde 26%,
+    #b0b7bb 42%,
+    #878e92 56%,
+    #646a6d 70%,
+    #494e51 82%,
+    #33383a 100%
+  );
+}
+
+/* The pipe carries on across the ball: its banding fades into the round
+   end instead of stopping at a seam. */
 .bank-arm::after {
   content: '';
   position: absolute;
   right: -3px;
   top: 50%;
-  width: 14px;
+  width: 15px;
   height: 15px;
   transform: translateY(-50%);
   border-radius: 50%;
-  background: linear-gradient(160deg, #fdfefe, #b2b7ba 58%, #73787b);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 65%),
-    0 1px 2px rgb(0 0 0 / 45%);
+  background: linear-gradient(
+    180deg,
+    #fdfefe 0%,
+    #eef1f2 8%,
+    #d2d8da 18%,
+    #a9b0b4 30%,
+    #858c90 44%,
+    #6b7175 58%,
+    #565c5f 68%,
+    #6f7578 78%,
+    #949a9d 90%,
+    #b9bfc2 100%
+  );
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 30%) 26%, rgb(0 0 0 / 0%) 52%);
+  mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 30%) 26%, rgb(0 0 0 / 0%) 52%);
 }
 
 .bank-switch[aria-checked='true'] .bank-arm {
   transform: translateY(12px) rotate(24deg);
+}
+
+.bank-switch[aria-checked='true'] .bank-arm::before {
+  transform: translateY(-50%) rotate(-24deg);
 }
 
 .bank-switch:focus-visible {
