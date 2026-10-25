@@ -608,9 +608,8 @@ export class Panel {
     const runLed = element('span', 'run-led');
     runLed.setAttribute('aria-hidden', 'true');
     startLabel.append(runLed, document.createTextNode('START'));
-    const rocker = element('span', 'start-rocker');
     const stopLabel = element('span', 'stop-label', 'STOP');
-    this.startStop.append(startLabel, rocker, stopLabel);
+    this.startStop.append(startLabel, stopLabel);
     keys.append(this.startStop);
 
     const keybed = element('div', 'keybed');
