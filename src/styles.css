@@ -945,19 +945,22 @@ body {
     linear-gradient(#fffef7 0%, #f6f1e5 46%, #e1dbcc 100%);
 }
 
-/* The key dips while the pointer is on it, even when it is not latched. */
+/* The key sinks into the bed while the pointer is on it, even when it is
+   not latched. The panel is seen from above, so a key that is pushed in
+   travels towards the top of the screen. */
 .rhythm-key:not([aria-pressed='true']):active {
-  transform: translateY(3px);
+  transform: translateY(-3px);
   box-shadow:
     0 1px 0 #a29c8f,
     0 2px 4px rgb(0 0 0 / 32%),
     inset 0 1px 0 #fffef8;
 }
 
-/* A latched key is lit from behind and sits lower than the keys around
-   it, the way the hardware shows a rhythm that belongs to the selection. */
+/* A latched key is lit from behind and sits deeper in the bed than the
+   keys around it, the way the hardware shows a rhythm that belongs to the
+   selection. */
 .rhythm-key[aria-pressed='true'] {
-  transform: translateY(5px);
+  transform: translateY(-4px);
   background:
     radial-gradient(120% 105% at 50% 118%, rgb(255 208 128 / 90%), transparent 74%),
     linear-gradient(#f7e8c6 0%, #ecd9ac 58%, #dcc596 100%);
@@ -1046,7 +1049,7 @@ body {
 }
 
 .start-stop:active {
-  transform: translateY(3px);
+  transform: translateY(-3px);
   box-shadow:
     0 1px 0 #2c2c27,
     0 2px 4px rgb(0 0 0 / 45%),
@@ -1055,7 +1058,7 @@ body {
 
 /* The switch is thrown while the transport runs. */
 .start-stop[aria-pressed='true'] {
-  transform: translateY(4px);
+  transform: translateY(-4px);
   background:
     linear-gradient(90deg, rgb(255 255 255 / 10%), transparent 20% 80%, rgb(0 0 0 / 16%)),
     linear-gradient(#5a5a53 0%, #4a4a43 46%, #3c3c36 100%);
