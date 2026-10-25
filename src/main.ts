@@ -26,8 +26,6 @@ link.href = 'https://github.com/cmatsuoka/libpoppy';
 link.target = '_blank';
 link.rel = 'noreferrer';
 link.textContent = 'libpoppy';
-// The licence stays with the name of the library, the version is what
-// the panel shows.
 link.title = `libpoppy ${LIBPOPPY_VERSION}`;
-footnote.append('engine: ', link, ' ', LIBPOPPY_VERSION);
+footnote.append('using ', link, ' ', LIBPOPPY_VERSION);
 host.append(footnote);
