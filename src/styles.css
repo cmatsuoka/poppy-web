@@ -884,10 +884,12 @@ body {
   color: #7a7466;
   font: inherit;
   cursor: pointer;
-  /* A key that is held down must not start a selection or a zoom. */
+  /* A key that is held down must not start a selection or a zoom. Two
+     fingers have to be able to hold two keys at the same time, so the
+     browser may not turn the second touch into a pinch. */
   user-select: none;
   -webkit-touch-callout: none;
-  touch-action: manipulation;
+  touch-action: none;
   transition:
     transform 60ms ease,
     box-shadow 60ms ease,

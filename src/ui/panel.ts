@@ -17,13 +17,21 @@ const Q16 = 65536;
  */
 const LONG_PRESS_MS = 500;
 
+/**
+ * How many keys may be held down at the same time. Two is what a chord
+ * is: two fingers on two keys latch them together, the way two keys
+ * pressed at the same time do on the machine.
+ */
+const MAX_SIMULTANEOUS_KEYS = 2;
+
 /** A key that is being held down. */
 interface KeyPress {
   index: number;
   /** The long press has already been carried out. */
   long: boolean;
-  source: 'pointer' | 'key';
   timer: ReturnType<typeof setTimeout>;
+  /** The press is one half of a chord. */
+  chord: boolean;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -334,9 +342,12 @@ export class Panel {
   // selection; until then it also covers an engine that never answers.
   private requested: { bank: Bank; buttons: number } | null = null;
 
-  // The rhythm key that is being held down, and the keyboard click that
-  // must not be carried out twice.
-  private press: KeyPress | null = null;
+  // The keys that are being held down. A pointer press belongs to the
+  // pointer that made it, so a second finger can hold a second key; the
+  // keyboard has a press of its own. The keyboard click must not be
+  // carried out twice.
+  private readonly pointerPresses = new Map<number, KeyPress>();
+  private keyPress: KeyPress | null = null;
   private keyboardHandled = false;
 
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -566,7 +577,7 @@ export class Panel {
 
     const keys = element('div', 'rhythm-keys');
     keys.title =
-      'Click a rhythm to select it on its own, click a lit rhythm to keep the selection, hold it down to add it to the selection.';
+      'Click a rhythm to select it on its own, click a lit rhythm to keep the selection, hold it down to add it to the selection, press two keys at the same time to latch them together.';
     for (let index = 0; index < 10; index += 1) {
       const button = element('button', 'rhythm-key');
       button.type = 'button';
@@ -583,7 +594,9 @@ export class Panel {
       button.addEventListener('pointerup', (event) =>
         this.onKeyPointerUp(index, event),
       );
-      button.addEventListener('pointercancel', () => this.cancelPress());
+      button.addEventListener('pointercancel', (event) =>
+        this.cancelPress(event.pointerId),
+      );
       button.addEventListener('keydown', (event) =>
         this.onKeyKeyDown(index, event),
       );
@@ -617,7 +630,9 @@ export class Panel {
 
   private wireEvents(): void {
     // A press that ends outside the key is taken back.
-    document.addEventListener('pointerup', () => this.cancelPress());
+    document.addEventListener('pointerup', (event) =>
+      this.cancelPress(event.pointerId),
+    );
 
     this.bankSwitch.addEventListener('click', () => {
       const bank: Bank = this.displayedBank() === 0 ? 1 : 0;
@@ -671,32 +686,87 @@ export class Panel {
     this.requestSelection(this.displayedBank(), next);
   }
 
-  private beginPress(index: number, source: 'pointer' | 'key'): void {
-    this.endPress();
-    const press: KeyPress = { index, long: false, source, timer: 0 };
+  /**
+   * A finger goes down on a key. The press belongs to that finger, so a
+   * second finger can hold a second key at the same time.
+   */
+  private beginPointerPress(index: number, pointerId: number): void {
+    const press: KeyPress = {
+      index,
+      long: false,
+      timer: 0,
+      chord: false,
+    };
     press.timer = setTimeout(() => {
-      if (this.press !== press) {
+      if (this.pointerPresses.get(pointerId) !== press) {
         return;
       }
       press.long = true;
       this.applyLongPress(index);
     }, LONG_PRESS_MS);
-    this.press = press;
+    this.pointerPresses.set(pointerId, press);
+
+    // A second finger on another key makes a chord: the two keys latch
+    // together, the way two keys pressed at the same time do on the
+    // machine.
+    if (this.pointerPresses.size === 2) {
+      this.startChord();
+    }
   }
 
-  private endPress(): void {
-    if (this.press === null) {
-      return;
+  /**
+   * Two keys are held down at the same time. They latch together and
+   * make the whole selection, the way a chord on the machine does.
+   */
+  private startChord(): void {
+    let mask = 0;
+    for (const press of this.pointerPresses.values()) {
+      clearTimeout(press.timer);
+      press.chord = true;
+      mask |= 1 << press.index;
     }
-    clearTimeout(this.press.timer);
-    this.press = null;
+    this.requestSelection(this.displayedBank(), mask);
+  }
+
+  private endPointerPress(pointerId: number): KeyPress | null {
+    const press = this.pointerPresses.get(pointerId);
+    if (press === undefined) {
+      return null;
+    }
+    clearTimeout(press.timer);
+    this.pointerPresses.delete(pointerId);
+    return press;
   }
 
   /** A press that was taken back, for example when the pointer wandered off. */
-  private cancelPress(): void {
-    if (this.press?.source === 'pointer') {
-      this.endPress();
+  private cancelPress(pointerId: number): void {
+    this.endPointerPress(pointerId);
+  }
+
+  private beginKeyPress(index: number): void {
+    this.endKeyPress();
+    const press: KeyPress = {
+      index,
+      long: false,
+      timer: 0,
+      chord: false,
+    };
+    press.timer = setTimeout(() => {
+      if (this.keyPress !== press) {
+        return;
+      }
+      press.long = true;
+      this.applyLongPress(index);
+    }, LONG_PRESS_MS);
+    this.keyPress = press;
+  }
+
+  private endKeyPress(): void {
+    if (this.keyPress === null) {
+      return;
     }
+    clearTimeout(this.keyPress.timer);
+    this.keyPress = null;
   }
 
   /**
@@ -706,28 +776,38 @@ export class Panel {
    * while the press is already running.
    */
   private cancelKeyPress(): void {
-    if (this.press?.source === 'key') {
-      this.endPress();
-    }
+    this.endKeyPress();
   }
 
   private onKeyPointerDown(index: number, event: PointerEvent): void {
-    if (event.button !== 0 || !event.isPrimary) {
+    if (event.button !== 0) {
+      return;
+    }
+    // A second finger on the same key is the same press, not a new one.
+    for (const press of this.pointerPresses.values()) {
+      if (press.index === index) {
+        return;
+      }
+    }
+    // A chord is two keys; a third finger has nothing to latch.
+    if (this.pointerPresses.size >= MAX_SIMULTANEOUS_KEYS) {
       return;
     }
     this.keyboardHandled = false;
-    this.beginPress(index, 'pointer');
+    this.beginPointerPress(index, event.pointerId);
   }
 
   private onKeyPointerUp(index: number, event: PointerEvent): void {
-    const press = this.press;
-    if (press === null || press.source !== 'pointer' || press.index !== index) {
+    const press = this.endPointerPress(event.pointerId);
+    if (press === null || press.index !== index) {
       return;
     }
-    this.endPress();
-    if (!press.long) {
-      this.applyShortPress(index);
+    // A chord has latched its keys already, and a long press has done
+    // its work when the timer ran.
+    if (press.chord || press.long) {
+      return;
     }
+    this.applyShortPress(index);
   }
 
   private onKeyKeyDown(index: number, event: KeyboardEvent): void {
@@ -738,18 +818,18 @@ export class Panel {
       return;
     }
     this.keyboardHandled = false;
-    this.beginPress(index, 'key');
+    this.beginKeyPress(index);
   }
 
   private onKeyKeyUp(index: number, event: KeyboardEvent): void {
     if (event.key !== 'Enter' && event.key !== ' ') {
       return;
     }
-    const press = this.press;
-    if (press === null || press.source !== 'key' || press.index !== index) {
+    const press = this.keyPress;
+    if (press === null || press.index !== index) {
       return;
     }
-    this.endPress();
+    this.endKeyPress();
     this.keyboardHandled = true;
     if (!press.long) {
       this.applyShortPress(index);
@@ -769,7 +849,7 @@ export class Panel {
       this.keyboardHandled = false;
       return;
     }
-    if (this.press?.source === 'key') {
+    if (this.keyPress !== null) {
       // Enter produces its click while the key is still held down.
       return;
     }
