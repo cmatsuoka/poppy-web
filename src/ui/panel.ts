@@ -53,6 +53,40 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function rhythmIndexForKey(key: string): number | null {
+  if (key === '0') {
+    return 9;
+  }
+  if (key >= '1' && key <= '9') {
+    return Number(key) - 1;
+  }
+  return null;
+}
+
+/**
+ * The rhythm key a number key stands for. The printed key is looked at
+ * first, so the key that reads "1" presses the first rhythm on every
+ * layout; the physical key is the fallback for the layouts where the
+ * digits need a modifier.
+ */
+function rhythmShortcutFor(
+  event: KeyboardEvent,
+): { id: string; index: number } | null {
+  const id = event.code !== '' ? event.code : `key:${event.key}`;
+
+  const index = rhythmIndexForKey(event.key);
+  if (index !== null) {
+    return { id, index };
+  }
+
+  const match = /^(?:Digit|Numpad)([0-9])$/.exec(event.code);
+  if (match === null) {
+    return null;
+  }
+  const digit = Number(match[1]);
+  return { id, index: digit === 0 ? 9 : digit - 1 };
+}
+
 interface FaderOptions {
   label: string;
   ariaLabel?: string;
@@ -352,6 +386,7 @@ export class Panel {
   private readonly pointerPresses = new Map<number, KeyPress>();
   private keyPress: KeyPress | null = null;
   private keyboardHandled = false;
+  private readonly shortcutKeys = new Map<string, number>();
 
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private lastFlash = -1;
@@ -588,7 +623,7 @@ export class Panel {
 
     const keys = element('div', 'rhythm-keys');
     keys.title =
-      'Click a rhythm to select it on its own, click a lit rhythm to keep the selection, hold it down to add it to the selection, press two keys at the same time to latch them together.';
+      'Click a rhythm to select it on its own, click a lit rhythm to keep the selection, hold it down to add it to the selection, press two keys at the same time to latch them together. On the keyboard: 1 to 0 press the ten rhythm keys, A and B pick the bank, Space starts and stops.';
     for (let index = 0; index < 10; index += 1) {
       const button = element('button', 'rhythm-key');
       button.type = 'button';
@@ -644,29 +679,140 @@ export class Panel {
       this.cancelPress(event.pointerId),
     );
 
+    document.addEventListener(
+      'keydown',
+      (event) => this.onShortcutKeyDown(event),
+      true,
+    );
+    document.addEventListener(
+      'keyup',
+      (event) => this.onShortcutKeyUp(event),
+      true,
+    );
+    window.addEventListener('blur', () => this.shortcutKeys.clear());
+
     this.bankSwitch.addEventListener('click', () => {
-      const bank: Bank = this.displayedBank() === 0 ? 1 : 0;
-      this.requestSelection(bank, this.displayedButtons());
+      this.selectBank(this.displayedBank() === 0 ? 1 : 0);
     });
 
-    this.startStop.addEventListener('click', () => {
-      if (this.state.running) {
-        this.engine.stop();
+    this.startStop.addEventListener('click', () => this.toggleTransport());
+  }
+
+  private toggleTransport(): void {
+    if (this.startStop.disabled) {
+      return;
+    }
+    if (this.state.running) {
+      this.engine.stop();
+      return;
+    }
+    this.startStop.disabled = true;
+    this.engine
+      .start()
+      .catch((error: unknown) => {
+        this.showStatus(
+          error instanceof Error ? error.message : String(error),
+          true,
+        );
+      })
+      .finally(() => {
+        this.startStop.disabled = false;
+      });
+  }
+
+  private selectBank(bank: Bank): void {
+    if (this.displayedBank() === bank) {
+      return;
+    }
+    this.requestSelection(bank, this.displayedButtons());
+  }
+
+  private onShortcutKeyDown(event: KeyboardEvent): void {
+    if (
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.isComposing ||
+      this.isTypingTarget(event)
+    ) {
+      return;
+    }
+
+    if (event.key === ' ') {
+      event.preventDefault();
+      if (!event.repeat) {
+        this.toggleTransport();
+      }
+      return;
+    }
+
+    if (event.repeat) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === 'a' || key === 'b') {
+      this.selectBank(key === 'a' ? 0 : 1);
+      return;
+    }
+
+    const shortcut = rhythmShortcutFor(event);
+    if (shortcut === null) {
+      return;
+    }
+
+    // A key that is already held down is the same key, not a new one.
+    for (const held of this.shortcutKeys.values()) {
+      if (held === shortcut.index) {
         return;
       }
-      this.startStop.disabled = true;
-      this.engine
-        .start()
-        .catch((error: unknown) => {
-          this.showStatus(
-            error instanceof Error ? error.message : String(error),
-            true,
-          );
-        })
-        .finally(() => {
-          this.startStop.disabled = false;
-        });
-    });
+    }
+
+    // A chord is two keys; a third key has nothing to latch.
+    if (this.shortcutKeys.size >= MAX_SIMULTANEOUS_KEYS) {
+      return;
+    }
+
+    this.shortcutKeys.set(shortcut.id, shortcut.index);
+    if (this.shortcutKeys.size === 1) {
+      this.applyShortPress(shortcut.index);
+      return;
+    }
+
+    let mask = 0;
+    for (const held of this.shortcutKeys.values()) {
+      mask |= 1 << held;
+    }
+    this.requestSelection(this.displayedBank(), mask);
+  }
+
+  private onShortcutKeyUp(event: KeyboardEvent): void {
+    const shortcut = rhythmShortcutFor(event);
+    if (shortcut !== null) {
+      this.shortcutKeys.delete(shortcut.id);
+    }
+    if (
+      event.key !== ' ' ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      this.isTypingTarget(event)
+    ) {
+      return;
+    }
+    event.preventDefault();
+  }
+
+  private isTypingTarget(event: KeyboardEvent): boolean {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    if (target.isContentEditable) {
+      return true;
+    }
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   }
 
   /**
@@ -821,7 +967,7 @@ export class Panel {
   }
 
   private onKeyKeyDown(index: number, event: KeyboardEvent): void {
-    if (event.key !== 'Enter' && event.key !== ' ') {
+    if (event.key !== 'Enter') {
       return;
     }
     if (event.repeat) {
@@ -832,7 +978,7 @@ export class Panel {
   }
 
   private onKeyKeyUp(index: number, event: KeyboardEvent): void {
-    if (event.key !== 'Enter' && event.key !== ' ') {
+    if (event.key !== 'Enter') {
       return;
     }
     const press = this.keyPress;

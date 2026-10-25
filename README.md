@@ -28,6 +28,14 @@ not committed. The pinned upstream commit is set in that script. The same
 script writes `build/version.ts` with the version of the library it just
 built, and the panel shows that version next to the engine's name.
 
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `Space` | Start or stop the machine |
+| `1` … `9`, `0` | Press rhythm key 1 … 10 |
+| `A` / `B` | Select rhythm bank A or B |
+
 ## Secure context
 
 The sound engine runs in an `AudioWorklet`, and browsers only expose the
@@ -45,4 +53,3 @@ npm run dev:secure   # https://<lan-address>:5173, self-signed certificate
 
 The browser will warn about the self-signed certificate; accept it and the
 worklet becomes available.
-
