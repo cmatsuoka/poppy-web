@@ -1,4 +1,5 @@
 import './styles.css';
+import { LIBPOPPY_VERSION } from '../build/version';
 import { PoppyEngine } from './audio/engine';
 import { Panel } from './ui/panel';
 
@@ -21,5 +22,8 @@ link.href = 'https://github.com/cmatsuoka/libpoppy';
 link.target = '_blank';
 link.rel = 'noreferrer';
 link.textContent = 'libpoppy';
-footnote.append('engine: ', link, ' · MIT');
+// The licence stays with the name of the library, the version is what
+// the panel shows.
+link.title = `libpoppy ${LIBPOPPY_VERSION}`;
+footnote.append('engine: ', link, ' ', LIBPOPPY_VERSION);
 host.append(footnote);

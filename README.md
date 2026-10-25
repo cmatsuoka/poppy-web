@@ -35,7 +35,9 @@ npm run preview
 ```
 
 `vendor/libpoppy` is fetched into place by `scripts/build-wasm.sh` and is
-not committed. The pinned upstream commit is set in that script.
+not committed. The pinned upstream commit is set in that script. The same
+script writes `build/version.ts` with the version of the library it just
+built, and the panel shows that version next to the engine's name.
 
 ## Secure context
 
