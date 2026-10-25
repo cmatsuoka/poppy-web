@@ -11,6 +11,10 @@ if (host === null) {
 const engine = new PoppyEngine();
 new Panel(engine, host);
 
+// The audio graph is built while the page loads, so the first press on
+// START only has to wake the context up.
+void engine.init();
+
 // A handle for the end-to-end checks: the smoke tests drive the engine
 // through it and read the panel state back.
 (window as unknown as { poppy?: PoppyEngine }).poppy = engine;

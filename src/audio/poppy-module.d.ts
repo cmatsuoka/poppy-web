@@ -30,6 +30,22 @@ declare module '*poppy.mjs' {
     print?: (text: string) => void;
     printErr?: (text: string) => void;
     locateFile?: (path: string) => string;
+    /**
+     * Take over the instantiation of the wasm module. The callback gets
+     * the imports of the module and hands the instance back to the
+     * runtime. It may be called synchronously, and the exports of the
+     * instance have to be returned: the runtime takes them from there.
+     */
+    instantiateWasm?: (
+      imports: WebAssembly.Imports,
+      receiveInstance: (instance: WebAssembly.Instance) => WebAssembly.Exports,
+    ) => WebAssembly.Exports;
+    /**
+     * Called when the runtime is up and the C constructors have run. The
+     * module object that was handed in carries the exports and the heap
+     * views from that moment on.
+     */
+    onRuntimeInitialized?: () => void;
   }
 
   const createPoppyModule: (

@@ -124,6 +124,25 @@ export class PoppyEngine {
     void this.resume();
   }
 
+  /**
+   * Build the audio graph while the page is loading.
+   *
+   * Creating the context, loading the worklet and compiling the engine
+   * binary takes a moment, and none of it has to wait for the user: the
+   * first press on START then only has to wake the context up. The engine
+   * still works without this call, the first command would just build
+   * everything first.
+   */
+  async init(): Promise<void> {
+    try {
+      await this.ensure();
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error : new Error(String(error));
+      this.emitError(reason.message);
+      this.rejectAllPatternRequests(reason);
+    }
+  }
+
   stop(): void {
     this.post({ type: 'stop' });
   }
@@ -257,12 +276,12 @@ export class PoppyEngine {
         worklet.addModule(workletUrl),
       ]);
 
-      const node = new AudioWorkletNode(context, 'poppy-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
-        processorOptions: { wasmBinary: bytes },
-      });
+      // The binary is compiled here, in the main thread. A worklet may not
+      // compile a module while its global scope is still initialising, and
+      // a compiled module can be handed over to it as it is.
+      const wasmModule = await WebAssembly.compile(bytes);
+
+      const node = this.createWorkletNode(context, wasmModule, bytes);
 
       node.port.onmessage = (event: MessageEvent<EngineEvent>) => {
         this.handleEvent(event.data);
@@ -286,6 +305,38 @@ export class PoppyEngine {
     } catch (error) {
       await context.close();
       throw error;
+    }
+  }
+
+  /**
+   * Build the worklet node.
+   *
+   * The compiled module is the fast way in: the worklet only has to
+   * instantiate it, and the engine is ready right away. Browsers that
+   * cannot hand a compiled module over to the worklet get the bytes
+   * instead, and the worklet compiles them itself.
+   */
+  private createWorkletNode(
+    context: AudioContext,
+    wasmModule: WebAssembly.Module,
+    bytes: ArrayBuffer,
+  ): AudioWorkletNode {
+    const options: AudioWorkletNodeOptions = {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+    };
+
+    try {
+      return new AudioWorkletNode(context, 'poppy-processor', {
+        ...options,
+        processorOptions: { wasmModule },
+      });
+    } catch {
+      return new AudioWorkletNode(context, 'poppy-processor', {
+        ...options,
+        processorOptions: { wasmBinary: bytes.slice(0) },
+      });
     }
   }
 

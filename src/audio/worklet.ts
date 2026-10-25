@@ -1,5 +1,8 @@
 import './worklet-env';
-import createPoppyModule, { type PoppyModule } from '../../build/poppy.mjs';
+import createPoppyModule, {
+  type PoppyModule,
+  type PoppyModuleOptions,
+} from '../../build/poppy.mjs';
 import {
   INITIAL_PANEL_STATE,
   type EngineCommand,
@@ -13,8 +16,29 @@ const PANEL_INTERVAL = Math.max(1, Math.round(sampleRate / 20));
 
 interface WorkletOptions {
   processorOptions?: {
+    /**
+     * The engine binary, already compiled by the main thread. It is
+     * instantiated right here, and the engine is ready before the first
+     * sound.
+     */
+    wasmModule?: WebAssembly.Module;
+    /**
+     * The engine binary as bytes, for the browsers that cannot hand a
+     * compiled module over to the worklet. It is compiled in here, and
+     * that may only happen from the first render quantum.
+     */
     wasmBinary?: ArrayBuffer;
   };
+}
+
+/**
+ * The module object the Emscripten runtime fills in while it starts up:
+ * the exports and the heap views appear on the object that was handed in.
+ */
+type MutablePoppyModule = Partial<PoppyModule> & PoppyModuleOptions;
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 class PoppyProcessor extends AudioWorkletProcessor {
@@ -26,7 +50,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
   private panel: PanelState = { ...INITIAL_PANEL_STATE };
   private lastPanel: PanelState = { ...INITIAL_PANEL_STATE };
   private wasmBinary: ArrayBuffer | undefined;
-  private starting = false;
+  private building = false;
 
   private sincePanel = 0;
   private lastColumn = -1;
@@ -43,6 +67,12 @@ class PoppyProcessor extends AudioWorkletProcessor {
       this.handle(command);
     };
 
+    const wasmModule = options.processorOptions?.wasmModule;
+    if (wasmModule !== undefined) {
+      this.build(wasmModule);
+      return;
+    }
+
     this.wasmBinary = options.processorOptions?.wasmBinary;
   }
 
@@ -55,12 +85,13 @@ class PoppyProcessor extends AudioWorkletProcessor {
     const output = outputs[0];
 
     if (module === null || samples === null || output === undefined) {
-      // The engine is built from the first render quantum and not from the
-      // constructor: while the worklet global scope is still initialising,
-      // the audio thread does not run the tasks the WebAssembly compiler
-      // needs, and the compilation never finishes.
-      if (!this.starting) {
-        this.start();
+      // Without a module from the main thread the engine is built from the
+      // first render quantum and not from the constructor: while the
+      // worklet global scope is still initialising, the audio thread does
+      // not run the tasks the WebAssembly compiler needs, and the
+      // compilation never finishes.
+      if (!this.building) {
+        this.compile();
       }
       if (output !== undefined) {
         for (const channel of output) {
@@ -103,14 +134,55 @@ class PoppyProcessor extends AudioWorkletProcessor {
   }
 
   /**
-   * Build the engine.
+   * Build the engine from the module the main thread compiled.
    *
-   * The wasm binary is handed over as bytes, and `locateFile` keeps the
-   * Emscripten runtime from building a `URL` for it: an AudioWorkletGlobal
-   * Scope has no `URL` constructor.
+   * The instance is created here and the runtime is started synchronously,
+   * so the engine is ready as soon as the processor exists. A promise
+   * would not do: in an AudioWorkletGlobalScope it is only settled while
+   * the context renders, and the context does not render before the first
+   * gesture.
    */
-  private start(): void {
-    this.starting = true;
+  private build(wasmModule: WebAssembly.Module): void {
+    this.building = true;
+
+    const module: MutablePoppyModule = {
+      instantiateWasm: (
+        imports: WebAssembly.Imports,
+        receiveInstance: (instance: WebAssembly.Instance) => WebAssembly.Exports,
+      ) => {
+        const instance = new WebAssembly.Instance(wasmModule, imports);
+        // The exports have to be handed back: the runtime takes the return
+        // value of this callback as the exports of the module.
+        return receiveInstance(instance);
+      },
+      onRuntimeInitialized: () => {
+        this.attach(module as PoppyModule);
+      },
+    };
+
+    try {
+      // The runtime is already up when the call returns; the promise only
+      // carries a failure that happened before the callback ran.
+      void createPoppyModule(module).catch((error: unknown) => {
+        this.emit({ type: 'error', message: describe(error) });
+      });
+    } catch (error: unknown) {
+      this.emit({ type: 'error', message: describe(error) });
+    }
+  }
+
+  /**
+   * Build the engine from the bytes.
+   *
+   * The wasm module must not be compiled while the worklet global scope is
+   * still initialising: the audio thread cannot run the tasks the compiler
+   * needs, and the compilation never finishes. The compile therefore
+   * starts from the first render quantum, and `locateFile` keeps the
+   * Emscripten runtime from building a `URL` for the binary: an
+   * AudioWorkletGlobalScope has no `URL` constructor.
+   */
+  private compile(): void {
+    this.building = true;
 
     const wasmBinary = this.wasmBinary;
     if (wasmBinary === undefined) {
@@ -120,34 +192,39 @@ class PoppyProcessor extends AudioWorkletProcessor {
 
     createPoppyModule({ wasmBinary, locateFile: (path) => path })
       .then((module) => {
-        this.module = module;
-        this.context = module._poppy_create(sampleRate);
-        if (this.context === 0) {
-          throw new Error('could not allocate the engine context');
-        }
-
-        this.outPtr = module._malloc(BLOCK_FRAMES * 2 * Int16Array.BYTES_PER_ELEMENT);
-        this.samples = new Int16Array(
-          module.HEAPU8.buffer,
-          this.outPtr,
-          BLOCK_FRAMES * 2,
-        );
-
-        this.emit({ type: 'ready' });
-        this.readPanel();
-        this.postPanel();
-
-        for (const command of this.queue) {
-          this.handle(command);
-        }
-        this.queue.length = 0;
+        this.attach(module);
       })
       .catch((error: unknown) => {
-        this.emit({
-          type: 'error',
-          message: error instanceof Error ? error.message : String(error),
-        });
+        this.emit({ type: 'error', message: describe(error) });
       });
+  }
+
+  /**
+   * Take over the engine the runtime has just started.
+   */
+  private attach(module: PoppyModule): void {
+    this.module = module;
+    this.context = module._poppy_create(sampleRate);
+    if (this.context === 0) {
+      this.emit({ type: 'error', message: 'could not allocate the engine context' });
+      return;
+    }
+
+    this.outPtr = module._malloc(BLOCK_FRAMES * 2 * Int16Array.BYTES_PER_ELEMENT);
+    this.samples = new Int16Array(
+      module.HEAPU8.buffer,
+      this.outPtr,
+      BLOCK_FRAMES * 2,
+    );
+
+    this.emit({ type: 'ready' });
+    this.readPanel();
+    this.postPanel();
+
+    for (const command of this.queue) {
+      this.handle(command);
+    }
+    this.queue.length = 0;
   }
 
   private handle(command: EngineCommand): void {
