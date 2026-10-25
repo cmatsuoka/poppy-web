@@ -5,6 +5,7 @@ import createPoppyModule, {
 } from '../../build/poppy.mjs';
 import {
   INITIAL_PANEL_STATE,
+  INITIAL_SELECTION,
   type EngineCommand,
   type EngineEvent,
   type PanelState,
@@ -216,6 +217,18 @@ class PoppyProcessor extends AudioWorkletProcessor {
       this.outPtr,
       BLOCK_FRAMES * 2,
     );
+
+    // The machine comes up with the seventh rhythm key latched. The engine
+    // context starts with no key pressed, so the selection is applied here,
+    // before the first snapshot goes out: the panel never shows an empty
+    // key bed. Selecting starts the transport, so it is stopped again
+    // right away.
+    module._poppy_select_rhythm(
+      this.context,
+      INITIAL_SELECTION.bank,
+      INITIAL_SELECTION.buttons,
+    );
+    module._poppy_stop_rhythms(this.context);
 
     this.emit({ type: 'ready' });
     this.readPanel();

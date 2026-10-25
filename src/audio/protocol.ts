@@ -89,11 +89,20 @@ export type EngineEvent =
   | { type: 'pattern'; view: PatternView }
   | { type: 'error'; message: string };
 
-export const INITIAL_PANEL_STATE: PanelState = {
+/**
+ * The selection the panel starts with: the seventh rhythm key (Rock 1) is
+ * latched, the way the machine stands before the first press.
+ */
+export const INITIAL_SELECTION: { bank: Bank; buttons: number } = {
   bank: 0,
-  buttons: 0,
-  pendingBank: 0,
-  pendingButtons: 0,
+  buttons: 1 << 6,
+};
+
+export const INITIAL_PANEL_STATE: PanelState = {
+  bank: INITIAL_SELECTION.bank,
+  buttons: INITIAL_SELECTION.buttons,
+  pendingBank: INITIAL_SELECTION.bank,
+  pendingButtons: INITIAL_SELECTION.buttons,
   pending: false,
   running: false,
   column: 0,

@@ -1,5 +1,6 @@
 import type { PoppyEngine } from '../audio/engine';
 import {
+  INITIAL_PANEL_STATE,
   RHYTHM_BUTTON_COUNT,
   RHYTHM_NAMES,
   type Bank,
@@ -325,16 +326,7 @@ export class Panel {
   private readonly bannerText: HTMLParagraphElement;
   private readonly card: PatternGrid;
 
-  private state: PanelState = {
-    bank: 0,
-    buttons: 0,
-    pendingBank: 0,
-    pendingButtons: 0,
-    pending: false,
-    running: false,
-    column: 0,
-    flashCount: 0,
-  };
+  private state: PanelState = { ...INITIAL_PANEL_STATE };
 
   // The selection the user has just made. The panel shows it right away
   // and hands it over to the engine, which confirms it in the next panel
@@ -404,6 +396,9 @@ export class Panel {
 
     this.wireEvents();
     this.renderSelection();
+    // The card shows the pattern of the selection the machine starts with,
+    // so the first rhythm is on the card before the first snapshot arrives.
+    this.card.update(this.state);
     engine.onPanel((state) => this.render(state));
     engine.onError((message) => {
       this.showStatus(message, true);
@@ -428,8 +423,8 @@ export class Panel {
     const brand = element('div', 'brand');
     const plate = element('div', 'brand-plate');
     plate.append(
-      element('span', 'brand-name', 'poppy'),
-      element('span', 'brand-sub', 'rhythm unit'),
+      element('span', 'brand-name', 'libpoppy'),
+      element('span', 'brand-sub', 'rhythm demo'),
     );
     brand.append(plate);
 
@@ -571,7 +566,7 @@ export class Panel {
 
     const keys = element('div', 'rhythm-keys');
     keys.title =
-      'Click a rhythm to select it on its own, hold it down to add it to the selection.';
+      'Click a rhythm to select it on its own, click a lit rhythm to keep the selection, hold it down to add it to the selection.';
     for (let index = 0; index < 10; index += 1) {
       const button = element('button', 'rhythm-key');
       button.type = 'button';
@@ -651,13 +646,17 @@ export class Panel {
 
   /**
    * A short press picks a single rhythm: the key that was pressed becomes
-   * the only latched one, and pressing a latched key releases them all.
+   * the only latched one. A key that is already latched is left alone,
+   * and so is every other key: a click on a lit key must not switch the
+   * machine off.
    */
   private applyShortPress(index: number): void {
     const buttons = this.displayedButtons();
     const bit = 1 << index;
-    const next = (buttons & bit) !== 0 ? 0 : bit;
-    this.requestSelection(this.displayedBank(), next);
+    if ((buttons & bit) !== 0) {
+      return;
+    }
+    this.requestSelection(this.displayedBank(), bit);
   }
 
   /**
