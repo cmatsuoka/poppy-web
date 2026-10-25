@@ -407,11 +407,10 @@ body {
   background: linear-gradient(#e6c95e, var(--yellow-cap) 55%, #8f6d12);
 }
 
-.fader-name {
-  grid-row: 2;
-  grid-column: 2;
-  justify-self: center;
-  padding-top: clamp(4px, 0.6vw, 8px);
+/* The printed control names: the fader labels and the tempo name use
+   the same bold, widely spaced type. */
+.fader-name,
+.tempo-name {
   text-align: center;
   font-size: clamp(7px, 0.7vw, 10.5px);
   font-weight: 700;
@@ -419,6 +418,13 @@ body {
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink);
+}
+
+.fader-name {
+  grid-row: 2;
+  grid-column: 2;
+  justify-self: center;
+  padding-top: clamp(4px, 0.6vw, 8px);
 }
 
 .fader:focus-visible {
@@ -543,7 +549,9 @@ body {
 
 .tempo-caption {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(2px, 0.4vw, 5px);
   width: clamp(104px, 10.8vw, 132px);
   margin-top: clamp(5px, 0.8vw, 9px);
   font-size: clamp(7px, 0.64vw, 9px);
@@ -552,8 +560,10 @@ body {
   color: var(--ink);
 }
 
-.tempo-name {
-  letter-spacing: 0.16em;
+.tempo-edges {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .tempo-readout {
@@ -1309,7 +1319,8 @@ body {
     border-radius: 12px;
   }
 
-  .fader-name {
+  .fader-name,
+  .tempo-name {
     letter-spacing: 0.02em;
   }
 

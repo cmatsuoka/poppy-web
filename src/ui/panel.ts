@@ -222,11 +222,14 @@ class Knob {
 
     this.readout = element('output', 'tempo-readout');
     const caption = element('div', 'tempo-caption');
-    caption.append(
+    // SLOW/FAST flank the knob; the name sits on its own line below,
+    // in the same print as the fader labels.
+    const edges = element('div', 'tempo-edges');
+    edges.append(
       element('span', 'tempo-edge', 'SLOW'),
-      element('span', 'tempo-name', 'TEMPO'),
       element('span', 'tempo-edge', 'FAST'),
     );
+    caption.append(edges, element('span', 'tempo-name', 'TEMPO'));
 
     this.element.append(ticks, this.base, caption, this.readout);
 
