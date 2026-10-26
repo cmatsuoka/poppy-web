@@ -396,6 +396,12 @@ export class Panel {
   // selection; until then it also covers an engine that never answers.
   private requested: { bank: Bank; buttons: number } | null = null;
 
+  // The transport state the panel expects. A press that follows another
+  // one right away must not be lost while the engine's answer is still
+  // on its way, so the panel counts its own presses and follows the
+  // engine again as soon as the engine has changed its state.
+  private transportIntent = false;
+
   // The keys that are being held down. A pointer press belongs to the
   // pointer that made it, so a second finger can hold a second key; the
   // keyboard has a press of its own. The keyboard click must not be
@@ -676,6 +682,10 @@ export class Panel {
       keys.append(button);
     }
 
+    // The start/stop switch is momentary: it is pressed down while the
+    // finger is on it and springs back afterwards. The pilot lamp above
+    // the legends tells whether the machine runs, `aria-pressed` tells it
+    // to a screen reader.
     this.startStop = element('button', 'start-stop');
     this.startStop.type = 'button';
     this.startStop.setAttribute('aria-pressed', 'false');
@@ -723,14 +733,18 @@ export class Panel {
     if (this.startStop.disabled) {
       return;
     }
-    if (this.state.running) {
+    if (this.transportIntent) {
+      this.transportIntent = false;
       this.engine.stop();
       return;
     }
+    this.transportIntent = true;
     this.startStop.disabled = true;
     this.engine
       .start()
       .catch((error: unknown) => {
+        // The machine never came up, so it is not running either.
+        this.transportIntent = false;
         this.showStatus(
           error instanceof Error ? error.message : String(error),
           true,
@@ -1083,6 +1097,13 @@ export class Panel {
   private render(state: PanelState): void {
     const wasRunning = this.state.running;
     this.state = state;
+
+    // The engine has changed its state, so it has taken over the last
+    // press. A snapshot that carries the state it had before the press
+    // says nothing about it and leaves the panel's own opinion alone.
+    if (wasRunning !== state.running) {
+      this.transportIntent = state.running;
+    }
 
     // The engine has caught up with the request when it reports the same
     // selection; from then on the panel follows the engine again.
