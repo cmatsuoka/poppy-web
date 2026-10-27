@@ -11,6 +11,7 @@
     "dev:secure": "vite --host --mode secure",
     "build": "npm run build:wasm && vite build",
     "preview": "vite preview",
+    "test:glue": "bash scripts/test-glue.sh",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

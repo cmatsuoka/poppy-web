@@ -1,15 +1,33 @@
 import type { PoppyEngine } from '../audio/engine';
 import {
   INITIAL_PANEL_STATE,
+  PATTERN_ACCENT_BIT,
+  PATTERN_SOURCE_PRESET,
+  PATTERN_SOURCE_USER,
   RHYTHM_BUTTON_COUNT,
   RHYTHM_NAMES,
   type Bank,
   type PanelState,
+  type PatternSource,
+  type UserPattern,
 } from '../audio/protocol';
 import { FitScaler } from './fit';
 import { PatternGrid, rhythmsFor } from './pattern-grid';
+import { loadUserPatterns, saveUserPatterns } from './user-store';
+import { UserNames } from './user-names';
 
 const Q16 = 65536;
+
+/**
+ * The knobs of the band under the black cover.
+ *
+ * They have no function of their own yet: the panel keeps the room for
+ * them and waits for what they will do.
+ */
+const PANEL_KNOBS = 8;
+
+/** The detents of a knob of the band. */
+const PANEL_KNOB_POSITIONS = 15;
 
 /**
  * How long a key has to be held down before the press counts as a long
@@ -370,6 +388,141 @@ class Knob {
   }
 }
 
+interface MiniKnobOptions {
+  /** The printed caption under the knob. */
+  label: string;
+  /** How many detents the knob has. */
+  positions: number;
+  value: number;
+  ariaLabel: string;
+  /** What the current position is called. */
+  valueText: (value: number) => string;
+  /** What the knob reads out. It is the value text unless told otherwise. */
+  readout?: (value: number) => string;
+  /** Whether the knob reads out its value at all. */
+  showReadout?: boolean;
+  onInput: (value: number) => void;
+}
+
+/**
+ * One of the small knobs of the write strip: a detented rotary switch with
+ * a printed caption. The knob turns with the finger, in steps, and the
+ * arrow keys turn it as well.
+ */
+class MiniKnob {
+  readonly element: HTMLDivElement;
+  private readonly dial: HTMLDivElement;
+  private readonly readout: HTMLSpanElement;
+  private readonly caption: HTMLSpanElement;
+  private value: number;
+  private readonly positions: number;
+  private readonly onInput: (value: number) => void;
+  private readonly valueText: (value: number) => string;
+  private readonly readoutText: (value: number) => string;
+  private readonly showReadout: boolean;
+
+  constructor(options: MiniKnobOptions) {
+    this.positions = Math.max(1, options.positions);
+    this.value = clamp(options.value, 0, this.positions - 1);
+    this.onInput = options.onInput;
+    this.valueText = options.valueText;
+    this.readoutText = options.readout ?? options.valueText;
+    this.showReadout = options.showReadout ?? true;
+
+    this.element = element('div', 'mini-knob');
+    this.dial = element('div', 'mini-dial');
+    this.dial.tabIndex = 0;
+    this.dial.setAttribute('role', 'slider');
+    this.dial.setAttribute('aria-label', options.ariaLabel);
+    this.dial.setAttribute('aria-valuemin', '0');
+    this.dial.setAttribute('aria-valuemax', String(this.positions - 1));
+
+    const pointer = element('span', 'mini-pointer');
+    pointer.setAttribute('aria-hidden', 'true');
+    this.dial.append(pointer);
+
+    // The knob reads out what it points at: the name of the instrument,
+    // the number of the bar.
+    this.readout = element('span', 'mini-readout');
+    this.caption = element('span', 'mini-caption', options.label);
+
+    this.element.append(this.dial);
+    if (this.showReadout) {
+      this.element.append(this.readout);
+    }
+    this.element.append(this.caption);
+
+    let dragStartY = 0;
+    let dragStartValue = 0;
+    this.dial.addEventListener('pointerdown', (event) => {
+      dragStartY = event.clientY;
+      dragStartValue = this.value;
+      this.dial.setPointerCapture(event.pointerId);
+      this.dial.focus();
+    });
+    this.dial.addEventListener('pointermove', (event) => {
+      if (!this.dial.hasPointerCapture(event.pointerId)) {
+        return;
+      }
+      const delta = (dragStartY - event.clientY) / 18;
+      this.set(dragStartValue + delta, true);
+    });
+    this.dial.addEventListener('pointerup', (event) => {
+      this.dial.releasePointerCapture(event.pointerId);
+    });
+    this.dial.addEventListener('pointercancel', (event) => {
+      this.dial.releasePointerCapture(event.pointerId);
+    });
+    this.dial.addEventListener(
+      'wheel',
+      (event) => {
+        event.preventDefault();
+        this.set(this.value + (event.deltaY < 0 ? 1 : -1), true);
+      },
+      { passive: false },
+    );
+    this.dial.addEventListener('keydown', (event) => {
+      let next: number | null = null;
+      if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
+        next = this.value + 1;
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
+        next = this.value - 1;
+      } else if (event.key === 'Home') {
+        next = 0;
+      } else if (event.key === 'End') {
+        next = this.positions - 1;
+      }
+
+      if (next !== null) {
+        event.preventDefault();
+        this.set(next, true);
+      }
+    });
+
+    this.render();
+  }
+
+  set(value: number, notify: boolean): void {
+    const next = clamp(Math.round(value), 0, this.positions - 1);
+    const changed = next !== this.value;
+    this.value = next;
+    this.render();
+    if (notify && changed) {
+      this.onInput(this.value);
+    }
+  }
+
+  private render(): void {
+    const ratio = this.positions === 1 ? 0 : this.value / (this.positions - 1);
+    this.dial.style.setProperty('--angle', `${-135 + ratio * 270}deg`);
+    this.dial.setAttribute('aria-valuenow', String(this.value));
+    this.dial.setAttribute('aria-valuetext', this.valueText(this.value));
+    if (this.showReadout) {
+      this.readout.textContent = this.readoutText(this.value);
+    }
+  }
+}
+
 export class Panel {
   private readonly engine: PoppyEngine;
   private readonly root: HTMLDivElement;
@@ -380,6 +533,7 @@ export class Panel {
   private readonly faders: Fader[] = [];
   private readonly lamps: [HTMLElement, HTMLElement];
   private bankSwitch!: HTMLButtonElement;
+  private modeSwitch!: HTMLButtonElement;
   private startStop!: HTMLButtonElement;
   private readonly status: HTMLParagraphElement;
   private readonly statusText: HTMLSpanElement;
@@ -387,8 +541,25 @@ export class Panel {
   private readonly bannerText: HTMLParagraphElement;
   private readonly card: PatternGrid;
   private readonly fitter: FitScaler;
+  private cabinet!: HTMLElement;
 
   private state: PanelState = { ...INITIAL_PANEL_STATE };
+
+  // The source the user has just picked. The panel shows it right away and
+  // hands it over to the engine, which confirms it in the next snapshot.
+  private sourceRequested: PatternSource | null = null;
+
+  // The user patterns the panel knows about. They are the ones the strip
+  // has read or written, and they are the ones that are kept in the
+  // browser between two visits.
+  private readonly userPatterns = new Map<number, UserPattern>();
+
+  // The names of the user patterns. In the extended mode they take the
+  // place of the factory names on the key bed.
+  private readonly userNames = new UserNames();
+
+  // The band under the black cover: the row of knobs.
+  private extendedSection!: HTMLElement;
 
   // The selection the user has just made. The panel shows it right away
   // and hands it over to the engine, which confirms it in the next panel
@@ -435,11 +606,16 @@ export class Panel {
 
     const unit = element('div', 'unit');
     const cabinet = element('div', 'cabinet');
+    this.cabinet = cabinet;
+    // The black cover lies over the metal band at the top of the cabinet:
+    // it covers the write strip while the machine plays the factory
+    // rhythms.
     const deck = element('div', 'deck');
     deck.setAttribute('aria-hidden', 'true');
     const faceplate = element('div', 'faceplate');
     faceplate.append(this.buildTopControls(), this.buildRhythmControls());
-    cabinet.append(deck, faceplate);
+    this.extendedSection = this.buildExtendedSection();
+    cabinet.append(deck, this.extendedSection, faceplate);
     unit.append(cabinet);
     this.root.append(unit);
 
@@ -450,8 +626,17 @@ export class Panel {
     this.root.append(this.status);
 
     // The printed card sits under the machine and shows the pattern the
-    // engine is playing.
-    this.card = new PatternGrid(engine, this.root);
+    // engine is playing. In the extended mode it also carries the name of
+    // the user pattern and the accent row.
+    this.card = new PatternGrid(engine, this.root, {
+      names: this.userNames,
+      onAccent: (column, accent) => {
+        void this.writeStep(column, PATTERN_ACCENT_BIT, accent);
+      },
+      onToggle: (instrument, column, on) => {
+        void this.writeStep(column, 1 << instrument, on);
+      },
+    });
 
     host.append(this.root);
 
@@ -470,9 +655,18 @@ export class Panel {
 
     this.wireEvents();
     this.renderSelection();
+
     // The card shows the pattern of the selection the machine starts with,
     // so the first rhythm is on the card before the first snapshot arrives.
     this.card.update(this.state);
+
+    // The user patterns of the last visit are put back into the engine
+    // before the card reads anything.
+    for (const [index, pattern] of loadUserPatterns()) {
+      this.userPatterns.set(index, pattern);
+      this.engine.setUserPattern(index, pattern);
+    }
+
     engine.onPanel((state) => this.render(state));
     engine.onError((message) => {
       this.showStatus(message, true);
@@ -481,6 +675,9 @@ export class Panel {
         this.showBanner(failure);
       }
     });
+    // A name that is written on the card is printed on the key bed right
+    // away.
+    this.userNames.onChange(() => this.renderSelection());
     this.showStatus('Press START to play', false);
 
     // A browser or an address that can never play is reported before
@@ -489,6 +686,36 @@ export class Panel {
     if (unavailable !== null) {
       this.showBanner(unavailable);
     }
+  }
+
+  /**
+   * The section of the faceplate that the black cover hides.
+   *
+   * It is a row of eight knobs that have no function of their own yet: the
+   * panel keeps the room for them and waits for what they will do. The user
+   * patterns are written on the pattern card, not on this strip.
+   */
+  private buildExtendedSection(): HTMLElement {
+    const section = element('div', 'extended-section');
+    const strip = element('div', 'write-strip');
+
+    for (let index = 0; index < PANEL_KNOBS; index += 1) {
+      const knob = new MiniKnob({
+        label: String(index + 1),
+        positions: PANEL_KNOB_POSITIONS,
+        value: Math.floor(PANEL_KNOB_POSITIONS / 2),
+        ariaLabel: `Knob ${index + 1}`,
+        valueText: (value) => `Knob ${index + 1}, position ${value + 1}`,
+        showReadout: false,
+        onInput: () => {
+          // The knob has no function of its own yet.
+        },
+      });
+      strip.append(knob.element);
+    }
+
+    section.append(strip);
+    return section;
   }
 
   private buildTopControls(): HTMLElement {
@@ -611,13 +838,36 @@ export class Panel {
       markB,
     );
 
+    // The mode lever sits above the bank lever, in the same column: it
+    // picks the factory rhythms or the user patterns.
+    this.modeSwitch = element('button', 'mode-switch');
+    this.modeSwitch.type = 'button';
+    this.modeSwitch.setAttribute('role', 'switch');
+    this.modeSwitch.setAttribute('aria-checked', 'false');
+    this.modeSwitch.setAttribute(
+      'aria-label',
+      'Pattern source: factory rhythms or user patterns',
+    );
+    const modeSlot = element('span', 'lever-slot');
+    modeSlot.append(element('span', 'lever-arm'));
+    this.modeSwitch.append(modeSlot);
+
+    const modeMarks = element('div', 'mode-marks');
+    modeMarks.setAttribute('aria-hidden', 'true');
+    modeMarks.append(
+      element('span', 'mode-mark mode-mark-preset', 'PRESET'),
+      element('span', 'mode-mark mode-mark-user', 'EXTENDED'),
+    );
+    this.modeSwitch.append(modeMarks);
+    lampBlock.append(this.modeSwitch);
+
     this.bankSwitch = element('button', 'bank-switch');
     this.bankSwitch.type = 'button';
     this.bankSwitch.setAttribute('role', 'switch');
     this.bankSwitch.setAttribute('aria-checked', 'false');
     this.bankSwitch.setAttribute('aria-label', 'Rhythm bank A or B');
-    const bankSlot = element('span', 'bank-slot');
-    bankSlot.append(element('span', 'bank-arm'));
+    const bankSlot = element('span', 'lever-slot');
+    bankSlot.append(element('span', 'lever-arm'));
     this.bankSwitch.append(bankSlot);
     lampBlock.append(this.bankSwitch);
 
@@ -726,7 +976,44 @@ export class Panel {
       this.selectBank(this.displayedBank() === 0 ? 1 : 0);
     });
 
+    this.modeSwitch.addEventListener('click', () => {
+      this.setSource(
+        this.displayedSource() === PATTERN_SOURCE_USER
+          ? PATTERN_SOURCE_PRESET
+          : PATTERN_SOURCE_USER,
+      );
+    });
+
     this.startStop.addEventListener('click', () => this.toggleTransport());
+  }
+
+  /**
+   * Point the machine at the factory rhythms or at the user patterns.
+   *
+   * The switch is immediate, the way the engine's own source switch is: the
+   * selection keeps its meaning and is read against the other set of
+   * patterns.
+   */
+  private setSource(source: PatternSource): void {
+    if (this.displayedSource() === source) {
+      return;
+    }
+    this.sourceRequested = source;
+    this.renderSource();
+    this.engine.setSource(source);
+    this.showStatus(
+      source === PATTERN_SOURCE_USER
+        ? 'Extended mode: the user patterns are played'
+        : 'Preset mode: the factory rhythms are played',
+      false,
+    );
+  }
+
+  private displayedSource(): PatternSource {
+    if (this.sourceRequested !== null) {
+      return this.sourceRequested;
+    }
+    return this.state.source;
   }
 
   private toggleTransport(): void {
@@ -768,7 +1055,8 @@ export class Panel {
       event.metaKey ||
       event.altKey ||
       event.isComposing ||
-      this.isTypingTarget(event)
+      this.isTypingTarget(event) ||
+      this.isCardTarget(event)
     ) {
       return;
     }
@@ -788,6 +1076,15 @@ export class Panel {
     const key = event.key.toLowerCase();
     if (key === 'a' || key === 'b') {
       this.selectBank(key === 'a' ? 0 : 1);
+      return;
+    }
+
+    if (key === 'e') {
+      this.setSource(
+        this.displayedSource() === PATTERN_SOURCE_USER
+          ? PATTERN_SOURCE_PRESET
+          : PATTERN_SOURCE_USER,
+      );
       return;
     }
 
@@ -836,6 +1133,18 @@ export class Panel {
       return;
     }
     event.preventDefault();
+  }
+
+  /**
+   * Whether the key belongs to the pattern card.
+   *
+   * The card is a switchboard of its own: the arrow keys walk over the
+   * grid and the space bar puts a voice into a step. The shortcuts of the
+   * panel wait until the user is back on the panel.
+   */
+  private isCardTarget(event: KeyboardEvent): boolean {
+    const target = event.target;
+    return target instanceof Node && this.card.element.contains(target);
   }
 
   private isTypingTarget(event: KeyboardEvent): boolean {
@@ -1072,6 +1381,72 @@ export class Panel {
   }
 
   /**
+   * Write a bit into a step of the user patterns, or take it out again.
+   *
+   * The bit belongs to the pattern the card shows, so it is written into
+   * every user pattern that is latched: the card shows the step of the
+   * whole selection, and the step it marks is the same in all of them.
+   */
+  private async writeStep(
+    column: number,
+    bit: number,
+    on: boolean,
+  ): Promise<void> {
+    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+      return;
+    }
+
+    const slots = rhythmsFor(this.state.bank, this.state.buttons);
+    for (const slot of slots) {
+      let pattern = this.userPatterns.get(slot);
+      if (pattern === undefined) {
+        try {
+          pattern = await this.engine.getUserPattern(slot);
+        } catch (error: unknown) {
+          this.showStatus(
+            error instanceof Error ? error.message : String(error),
+            true,
+          );
+          return;
+        }
+        this.userPatterns.set(slot, pattern);
+      }
+
+      const notes = [...pattern.notes];
+      const mask = notes[column] ?? 0;
+      notes[column] = on
+        ? (mask | bit) & 0xffff
+        : mask & ~bit & 0xffff;
+
+      const next: UserPattern = { ...pattern, notes };
+      this.userPatterns.set(slot, next);
+      this.engine.setUserPattern(slot, next);
+    }
+
+    // The card shows the pattern that plays, so it has to read it again.
+    this.card.invalidate();
+    saveUserPatterns(this.userPatterns);
+  }
+
+  /**
+   * The black cover and the mode lever follow the source: in the extended
+   * mode the cover slides up and the write strip is there.
+   */
+  private renderSource(): void {
+    const extended = this.displayedSource() === PATTERN_SOURCE_USER;
+    this.cabinet.classList.toggle('is-extended', extended);
+    this.modeSwitch.setAttribute(
+      'aria-checked',
+      extended ? 'true' : 'false',
+    );
+    if (extended) {
+      this.extendedSection.removeAttribute('inert');
+    } else {
+      this.extendedSection.setAttribute('inert', '');
+    }
+  }
+
+  /**
    * The keys whose selection the engine has not taken over yet.
    *
    * While the transport runs, a new selection waits for the end of the
@@ -1118,6 +1493,12 @@ export class Panel {
       }
     }
 
+    // The same goes for the source: the engine confirms the switch with
+    // the next snapshot.
+    if (this.sourceRequested !== null && state.source === this.sourceRequested) {
+      this.sourceRequested = null;
+    }
+
     this.card.update(state);
     this.renderSelection();
 
@@ -1161,18 +1542,43 @@ export class Panel {
       // A key that waits for the end of the cycle pulses until the pattern
       // it belongs to is the one that plays.
       button.classList.toggle('is-pending', latched && pending.has(index));
+      // In the extended mode the key bed carries the names of the user
+      // patterns instead of the names of the factory rhythms.
+      const label = `${this.keyName(index)} / ${this.keyName(
+        index + RHYTHM_BUTTON_COUNT,
+      )}`;
+      if (button.getAttribute('aria-label') !== label) {
+        button.setAttribute('aria-label', label);
+      }
     });
 
     this.legendNames.forEach((row, rowIndex) => {
       row.forEach((name, index) => {
         const latched = rowIndex === bank && (buttons & (1 << index)) !== 0;
         name.classList.toggle('is-selected', latched);
+        const text = this.keyName(rowIndex * RHYTHM_BUTTON_COUNT + index);
+        if (name.textContent !== text) {
+          name.textContent = text;
+        }
       });
     });
 
     this.legendRows[0]?.classList.toggle('active', bank === 0);
     this.legendRows[1]?.classList.toggle('active', bank === 1);
     this.bankSwitch.setAttribute('aria-checked', bank === 1 ? 'true' : 'false');
+
+    this.renderSource();
+  }
+
+  /**
+   * The name of a key: the name of the factory rhythm, or the name of the
+   * user pattern in the extended mode.
+   */
+  private keyName(slot: number): string {
+    if (this.displayedSource() === PATTERN_SOURCE_USER) {
+      return this.userNames.name(slot);
+    }
+    return RHYTHM_NAMES[slot] ?? '';
   }
 
   private flash(bank: Bank): void {

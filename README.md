@@ -35,6 +35,14 @@ built, and the panel shows that version next to the engine's name.
 | `Space` | Start or stop the machine |
 | `1` … `9`, `0` | Press rhythm key 1 … 10 |
 | `A` / `B` | Select rhythm bank A or B |
+| `E` | Preset rhythms or user patterns |
+
+## Checks
+
+```sh
+npm run typecheck    # tsc --noEmit
+npm run test:glue    # native check of the wasm glue (needs the vendored library)
+```
 
 ## Secure context
 

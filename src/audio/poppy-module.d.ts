@@ -22,6 +22,20 @@ declare module '*poppy.mjs' {
     _poppy_set_instr_gain(ctx: number, instrument: number, q16: number): void;
     _poppy_panel_state(ctx: number): number;
     _poppy_factory_pattern(rhythm: number): number;
+    _poppy_pattern(ctx: number, rhythm: number): number;
+    _poppy_set_pattern_source(ctx: number, source: number): void;
+    _poppy_get_pattern_source(ctx: number): number;
+    _poppy_seed_user_patterns(ctx: number): void;
+    _poppy_set_user_pattern(
+      ctx: number,
+      index: number,
+      notesPtr: number,
+      enableLo: number,
+      enableHi: number,
+      period: number,
+      triplet: number,
+    ): number;
+    _poppy_user_pattern(ctx: number, index: number): number;
   }
 
   export interface PoppyModuleOptions {

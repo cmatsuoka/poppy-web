@@ -1,5 +1,14 @@
 export type Bank = 0 | 1;
 
+/**
+ * Which set of patterns the sequencer plays: the 20 factory rhythms or the
+ * 20 user-defined slots. The panel's mode lever switches between them.
+ */
+export type PatternSource = 0 | 1;
+
+export const PATTERN_SOURCE_PRESET: PatternSource = 0;
+export const PATTERN_SOURCE_USER: PatternSource = 1;
+
 export const INSTRUMENT_NAMES = [
   'Bass',
   'Snare 1',
@@ -45,10 +54,24 @@ export const INSTRUMENT_COUNT = INSTRUMENT_NAMES.length;
 export const RHYTHM_COUNT = RHYTHM_NAMES.length;
 export const RHYTHM_BUTTON_COUNT = 10;
 
+/**
+ * The accent flag of a pattern column.
+ *
+ * The fifteen instruments fill the lower fifteen bits of a column, so the
+ * sixteenth one marks the column as accented: every instrument in it is
+ * played louder. It is the engine's own flag, `MP7_PATTERN_ACCENT`.
+ */
+export const PATTERN_ACCENT_BIT = 1 << 15;
+
 // The engine's grid is a fixed 64 column cycle. A rhythm may store only its
 // shortest repeating period (16, 32 or 64 columns); the rest of the cycle
 // repeats it.
 export const PATTERN_COLUMNS = 64;
+
+// The cycle is read as four bars of sixteen steps. A step is a sixteenth
+// note at 120 BPM, the tempo the engine takes its columns from.
+export const PATTERN_STEPS_PER_BAR = 16;
+export const PATTERN_BARS = PATTERN_COLUMNS / PATTERN_STEPS_PER_BAR;
 
 export interface PanelState {
   bank: Bank;
@@ -59,6 +82,7 @@ export interface PanelState {
   running: boolean;
   column: number;
   flashCount: number;
+  source: PatternSource;
 }
 
 export interface PatternView {
@@ -72,6 +96,21 @@ export interface PatternView {
   triplet: boolean;
 }
 
+/**
+ * A user-defined pattern: the 64 columns of the cycle, the columns that
+ * take time, the length of the repeating part and the shuffle flag.
+ *
+ * A column holds the fifteen instruments in its lower bits and the accent
+ * flag in its sixteenth one, so the accent travels with the pattern.
+ */
+export interface UserPattern {
+  notes: number[];
+  enableLo: number;
+  enableHi: number;
+  period: number;
+  triplet: boolean;
+}
+
 export type EngineCommand =
   | { type: 'start' }
   | { type: 'stop' }
@@ -81,12 +120,16 @@ export type EngineCommand =
   | { type: 'volume'; value: number }
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }
-  | { type: 'pattern'; rhythm: number };
+  | { type: 'pattern'; rhythm: number }
+  | { type: 'source'; source: PatternSource }
+  | { type: 'userPattern'; index: number; pattern: UserPattern }
+  | { type: 'userPatternRequest'; index: number };
 
 export type EngineEvent =
   | { type: 'ready' }
   | { type: 'panel'; state: PanelState }
   | { type: 'pattern'; view: PatternView }
+  | { type: 'userPattern'; index: number; pattern: UserPattern }
   | { type: 'error'; message: string };
 
 /**
@@ -107,4 +150,5 @@ export const INITIAL_PANEL_STATE: PanelState = {
   running: false,
   column: 0,
   flashCount: 0,
+  source: PATTERN_SOURCE_PRESET,
 };

@@ -16,7 +16,27 @@
   --focus: #1b5a78;
   --gap: clamp(2px, 0.35vw, 6px);
   --plate-pad: clamp(14px, 1.7vw, 26px);
+  --plate-pad-top: clamp(14px, 1.6vw, 24px);
+  --cab-pad: clamp(8px, 1vw, 14px);
   --key-hang: 14px;
+  /* The height of the write strip the black cover hides. */
+  --section-height: clamp(58px, 6.6vw, 88px);
+  /* The chrome of the levers: a hot band along the top, the dark band the
+     horizon leaves across the middle and the bounce light along the
+     bottom. */
+  --chrome: linear-gradient(
+    180deg,
+    #fdfefe 0%,
+    #eef1f2 8%,
+    #d2d8da 18%,
+    #a9b0b4 30%,
+    #858c90 44%,
+    #6b7175 58%,
+    #565c5f 68%,
+    #6f7578 78%,
+    #949a9d 90%,
+    #b9bfc2 100%
+  );
 }
 
 * {
@@ -66,8 +86,11 @@ body {
 
 .cabinet {
   position: relative;
-  padding: clamp(8px, 1vw, 14px);
+  padding: var(--cab-pad);
   border-radius: 16px;
+  /* The black cover slides back into the machine, so it is clipped by the
+     edge of the cabinet. */
+  overflow: hidden;
   background:
     repeating-linear-gradient(
       88deg,
@@ -101,10 +124,20 @@ body {
   pointer-events: none;
 }
 
+/*
+ * The black cover. It lies over the metal band at the top of the cabinet,
+ * so the write strip is out of sight while the cover is down. In the
+ * extended mode the cover slides back into the machine and the strip comes
+ * into view.
+ */
 .deck {
-  height: clamp(46px, 7vw, 92px);
-  margin-bottom: clamp(4px, 0.6vw, 8px);
-  border-radius: 8px 8px 2px 2px;
+  position: absolute;
+  top: var(--cab-pad);
+  left: var(--cab-pad);
+  right: var(--cab-pad);
+  z-index: 2;
+  height: var(--section-height);
+  border-radius: 3px 3px 2px 2px;
   background:
     radial-gradient(circle at 24% 16%, rgb(255 255 255 / 7%), transparent 55%),
     repeating-linear-gradient(
@@ -117,11 +150,150 @@ body {
     inset 0 2px 12px rgb(0 0 0 / 75%),
     inset 0 -1px 0 rgb(255 255 255 / 9%),
     0 2px 3px rgb(0 0 0 / 45%);
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 260ms ease;
+}
+
+/* In the extended mode the black cover slides back and comes to rest over
+   the wooden border at the top of the cabinet. The write strip it hides
+   comes into view, and the faceplate below it does not move. */
+.cabinet.is-extended .deck {
+  transform: translateY(calc(-1 * var(--section-height)));
+  box-shadow:
+    inset 0 2px 12px rgb(0 0 0 / 75%),
+    inset 0 -1px 0 rgb(255 255 255 / 9%),
+    0 9px 16px rgb(0 0 0 / 50%);
+}
+
+/*
+ * The metal band at the top of the cabinet. The write strip lives in it,
+ * and the black cover lies over it.
+ */
+.extended-section {
+  height: var(--section-height);
+  margin-bottom: clamp(4px, 0.6vw, 8px);
+  border-radius: 3px;
+  color: var(--ink);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 5%) 0 1px,
+      rgb(0 0 0 / 3%) 1px 2px,
+      transparent 2px 6px
+    ),
+    linear-gradient(
+      100deg,
+      var(--metal-dark) 0%,
+      var(--metal-light) 24%,
+      var(--metal) 55%,
+      var(--metal-dark) 82%,
+      var(--metal) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 70%),
+    inset 0 -3px 8px rgb(40 44 46 / 26%),
+    0 1px 2px rgb(0 0 0 / 30%);
+}
+
+/* The band under the black cover: a row of knobs without a function of
+   their own yet. */
+.write-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: clamp(4px, 0.8vw, 14px);
+  height: var(--section-height);
+  padding: 0 var(--plate-pad);
+  border-bottom: 1px solid rgb(35 35 42 / 28%);
+  background: linear-gradient(rgb(255 255 255 / 14%), rgb(0 0 0 / 5%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 50%);
+}
+
+/* A small knob of the write strip: a detented rotary switch. */
+.mini-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(2px, 0.35vw, 5px);
+}
+
+.mini-dial {
+  position: relative;
+  width: clamp(26px, 2.7vw, 36px);
+  aspect-ratio: 1;
+  border: 1px solid #2a2a26;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(
+      rgb(255 255 255 / 8%) 0 2deg,
+      transparent 2deg 7deg
+    ),
+    radial-gradient(circle at 34% 26%, #54534b, #20201d 55%, #080808 100%);
+  box-shadow:
+    inset 0 2px 3px rgb(255 255 255 / 13%),
+    inset 0 -5px 9px rgb(0 0 0 / 90%),
+    0 3px 6px rgb(0 0 0 / 45%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.mini-dial:active {
+  cursor: grabbing;
+}
+
+.mini-pointer {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--angle, 0deg));
+  pointer-events: none;
+}
+
+.mini-pointer::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  width: 2px;
+  height: 42%;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: linear-gradient(#f6f2e6, #b9b2a0);
+  box-shadow: 0 0 3px rgb(0 0 0 / 45%);
+}
+
+.mini-dial:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.mini-caption {
+  font-size: clamp(5px, 0.52vw, 7px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* The knob reads out what it points at. */
+.mini-readout {
+  max-width: clamp(52px, 5.4vw, 76px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: clamp(6px, 0.62vw, 9px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 .faceplate {
   position: relative;
-  padding: clamp(14px, 1.6vw, 24px) var(--plate-pad) 0;
+  padding: var(--plate-pad-top) var(--plate-pad) 0;
   border-radius: 3px;
   color: var(--ink);
   background:
@@ -157,7 +329,9 @@ body {
   pointer-events: none;
 }
 
-.faceplate > * {
+/* The children of the faceplate stand above its own surface. The black
+   cover is the exception: it lies over the top of the plate. */
+.faceplate > *:not(.deck) {
   position: relative;
   z-index: 1;
 }
@@ -596,7 +770,7 @@ body {
 .lamp-block {
   display: grid;
   grid-template-columns: auto auto auto;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   align-items: center;
   gap: 9px 10px;
 }
@@ -612,13 +786,13 @@ body {
 
 .lamp-mark-a {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 2;
   background: var(--ink);
 }
 
 .lamp-mark-b {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 3;
   background: var(--red-ink);
 }
 
@@ -660,12 +834,12 @@ body {
 
 .lamp-a {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 .lamp-b {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
 }
 
 .lamp-a.on::after {
@@ -682,18 +856,33 @@ body {
     inset 0 1px 2px rgb(255 255 255 / 55%);
 }
 
+/* The lamps and their marks sit with the bank lever, in the lower part of
+   the column. */
+.lamp-a,
+.lamp-b,
+.lamp-mark-a,
+.lamp-mark-b {
+  position: relative;
+  top: clamp(10px, 1.5vw, 22px);
+}
+
+/* The bank lever sits a little lower in the column, so the two levers
+   are further apart. The offset is taken out of the space below the
+   top row, so nothing else on the panel moves. */
 .bank-switch {
   grid-column: 3;
-  grid-row: 1 / 3;
+  grid-row: 2 / 4;
   display: flex;
   align-items: center;
   padding: 2px;
   border: 0;
   background: none;
   cursor: pointer;
+  position: relative;
+  top: clamp(10px, 1.5vw, 22px);
 }
 
-.bank-slot {
+.lever-slot {
   position: relative;
   width: 19px;
   height: 64px;
@@ -707,7 +896,7 @@ body {
 
 /* The chrome paddle slides in the slit: it comes out of the top for bank A
    and out of the bottom for bank B, the way the original lever does. */
-.bank-arm {
+.lever-arm {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -717,19 +906,7 @@ body {
   border-radius: 2px 3px 3px 2px;
   /* A chrome pipe: a hot band along the top, the dark band the horizon
      leaves across the middle and the bounce light along the bottom. */
-  background: linear-gradient(
-    180deg,
-    #fdfefe 0%,
-    #eef1f2 8%,
-    #d2d8da 18%,
-    #a9b0b4 30%,
-    #858c90 44%,
-    #6b7175 58%,
-    #565c5f 68%,
-    #6f7578 78%,
-    #949a9d 90%,
-    #b9bfc2 100%
-  );
+  background: var(--chrome);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 90%),
     inset 0 -1px 0 rgb(0 0 0 / 30%),
@@ -745,7 +922,7 @@ body {
 
 /* The end of the lever is a turned ball. Its shading is counter-rotated
    with the paddle, so the light stays where the panel puts it. */
-.bank-arm::before {
+.lever-arm::before {
   content: '';
   position: absolute;
   right: -3px;
@@ -769,7 +946,7 @@ body {
 
 /* The pipe carries on across the ball: its banding fades into the round
    end instead of stopping at a seam. */
-.bank-arm::after {
+.lever-arm::after {
   content: '';
   position: absolute;
   right: -3px;
@@ -778,28 +955,19 @@ body {
   height: 15px;
   transform: translateY(-50%);
   border-radius: 50%;
-  background: linear-gradient(
-    180deg,
-    #fdfefe 0%,
-    #eef1f2 8%,
-    #d2d8da 18%,
-    #a9b0b4 30%,
-    #858c90 44%,
-    #6b7175 58%,
-    #565c5f 68%,
-    #6f7578 78%,
-    #949a9d 90%,
-    #b9bfc2 100%
-  );
+  background: var(--chrome);
   -webkit-mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 30%) 26%, rgb(0 0 0 / 0%) 52%);
   mask-image: linear-gradient(90deg, #000 0%, rgb(0 0 0 / 30%) 26%, rgb(0 0 0 / 0%) 52%);
 }
 
-.bank-switch[aria-checked='true'] .bank-arm {
+/* The lever travels: down is bank B, and down is the user patterns. */
+.bank-switch[aria-checked='true'] .lever-arm,
+.mode-switch[aria-checked='true'] .lever-arm {
   transform: translateY(12px) rotate(24deg);
 }
 
-.bank-switch[aria-checked='true'] .bank-arm::before {
+.bank-switch[aria-checked='true'] .lever-arm::before,
+.mode-switch[aria-checked='true'] .lever-arm::before {
   transform: translateY(-50%) rotate(-24deg);
 }
 
@@ -807,6 +975,83 @@ body {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 3px;
+}
+
+/*
+ * The mode lever stands above the bank lever, in the same column. It picks
+ * the factory rhythms (the lever is up) or the user patterns (the lever is
+ * down).
+ */
+.mode-switch {
+  position: relative;
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  /* A little air between the two levers. */
+  margin-bottom: clamp(2px, 0.3vw, 5px);
+}
+
+/* The printed marks of the mode lever: one at each end of its travel.
+   They are taken out of the flow: the column the lamps stand in keeps its
+   width, and the marks reach to the left over the empty row above the
+   lamps. They are printed in the same type as the rhythm labels. */
+.mode-marks {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  right: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  font-size: clamp(7px, 0.76vw, 10.5px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.45;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.mode-mark-user {
+  color: var(--red-ink);
+}
+
+.mode-switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The printed marks of the mode lever: one at each end of its travel.
+   They are printed in the same type as the rhythm labels. */
+.mode-marks {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  /* The marks stand at the two ends of the lever's travel. */
+  align-self: stretch;
+  justify-content: space-between;
+  /* They sit just inside the ends of the switch. */
+  margin: 8px 0;
+  font-size: clamp(7px, 0.76vw, 10.5px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.45;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.mode-mark-user {
+  color: var(--red-ink);
 }
 
 .rhythm-section {
@@ -1242,6 +1487,30 @@ body {
   color: var(--red-ink);
 }
 
+/* The name of a user pattern is written on the card, so it is a field and
+   not a print. It is as wide as the longest name the card accepts. */
+.pattern-name--input {
+  width: 12ch;
+  min-width: 4ch;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+}
+
+.pattern-name--input:hover {
+  border-color: rgb(35 35 42 / 25%);
+}
+
+.pattern-name--input:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: rgb(255 255 255 / 50%);
+}
+
 .pattern-name--pending {
   font-weight: 700;
   font-size: 0.8em;
@@ -1280,6 +1549,14 @@ body {
   opacity: 0.75;
 }
 
+/* The flag of the user patterns: the card shows the patterns of the
+   extended mode. */
+.pattern-flag--user {
+  border-color: #2f6a8c;
+  color: #2f6a8c;
+  opacity: 0.9;
+}
+
 .pattern-card-body {
   padding-top: clamp(5px, 0.7vw, 9px);
   overflow: hidden;
@@ -1308,8 +1585,52 @@ body {
   fill: var(--ink);
 }
 
+/* The ground of the grid. It is painted transparent, so a click on an
+   empty step is a click on the grid. */
+.pattern-grid-ground {
+  fill: transparent;
+  pointer-events: all;
+}
+
+/* The cursor: the step of the grid the keyboard is on. */
+.pattern-grid-cursor {
+  fill: none;
+  stroke: rgb(35 35 42 / 30%);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.pattern-grid:focus-visible {
+  outline: none;
+}
+
+.pattern-grid:focus-visible .pattern-grid-cursor {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
 .pattern-grid-hit--perc {
   fill: #2f6a8c;
+}
+
+/* The accent of a step: the engine plays the step louder, and the card
+   prints it in the red of the bank B names. */
+.pattern-grid-hit--accent {
+  fill: var(--red-ink);
+}
+
+/* A step of the accent row. It is a switch: it is clicked to accent a
+   step, and the keyboard walks over the row. */
+.pattern-grid-cell {
+  fill: transparent;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.pattern-grid-cell:focus {
+  outline: none;
+  stroke: var(--ink);
+  stroke-width: 1;
 }
 
 /* The bar that joins the ends of a run of Guiro hits. */
@@ -1327,11 +1648,20 @@ body {
   text-transform: uppercase;
 }
 
+/* A voice that does not play yet: it is printed, so the user can see that
+   it is there and that it is still empty. */
+.pattern-grid-label--empty {
+  fill: rgb(35 35 42 / 30%);
+}
+
 .pattern-playhead {
   fill: var(--red-ink);
   /* fill-opacity, not opacity: the card shows and hides the cursor with
      the SVG `opacity` attribute, and a CSS `opacity` would win over it. */
   fill-opacity: 0.85;
+  /* The cursor is drawn over the grid, so it must not catch the clicks
+     that belong to the accent row. */
+  pointer-events: none;
 }
 
 .pattern-card-state {
@@ -1342,6 +1672,74 @@ body {
   text-transform: uppercase;
   color: var(--ink-soft);
   opacity: 0.8;
+}
+
+/* The foot of the card: what the machine plays, and the control that
+   opens the card to the voices that are still empty. */
+.pattern-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(6px, 1vw, 14px);
+}
+
+.pattern-card-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  margin: clamp(4px, 0.6vw, 8px) 0 0;
+  padding: 0.2em 0.55em;
+  border: 1px solid rgb(35 35 42 / 30%);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: clamp(7px, 0.68vw, 9.5px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The little box in front of the label is the state of the control. */
+.pattern-card-expand::before {
+  content: '';
+  width: 0.75em;
+  height: 0.75em;
+  border: 1px solid currentcolor;
+  border-radius: 1px;
+}
+
+.pattern-card-expand[aria-pressed='true']::before {
+  background: currentcolor;
+}
+
+.pattern-card-expand:hover {
+  color: var(--ink);
+  border-color: rgb(35 35 42 / 55%);
+}
+
+.pattern-card-expand:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.pattern-card-expand[hidden] {
+  display: none;
+}
+
+/* For the things a screen reader has to read out but nobody has to see. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .footnote {

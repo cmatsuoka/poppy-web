@@ -6,7 +6,9 @@ import {
   type EngineCommand,
   type EngineEvent,
   type PanelState,
+  type PatternSource,
   type PatternView,
+  type UserPattern,
 } from './protocol';
 
 const Q16 = 65536;
@@ -65,6 +67,11 @@ export class PoppyEngine {
   >();
   private patternCache = new Map<number, PatternView>();
   private patternPending = new Map<number, Promise<PatternView>>();
+  private userPatternRequests = new Map<
+    number,
+    { resolve: (pattern: UserPattern) => void; reject: (reason: Error) => void }
+  >();
+  private userPatternPending = new Map<number, Promise<UserPattern>>();
   // A missing worklet is not something a retry can fix, so the failure is
   // latched and the engine stops trying to build a node.
   private fatal: Error | null = null;
@@ -216,6 +223,52 @@ export class PoppyEngine {
 
     this.patternPending.set(rhythm, request);
     return request;
+  }
+
+  /**
+   * Point the sequencer at the factory rhythms or at the user slots.
+   *
+   * The switch is immediate: the selection keeps its meaning and is read
+   * against the other set of patterns.
+   */
+  setSource(source: PatternSource): void {
+    this.post({ type: 'source', source });
+    // The patterns the card shows are the ones of the new source.
+    this.patternCache.clear();
+    this.wake();
+  }
+
+  /** Read a user pattern slot back from the engine. */
+  getUserPattern(index: number): Promise<UserPattern> {
+    const inflight = this.userPatternPending.get(index);
+    if (inflight !== undefined) {
+      return inflight;
+    }
+
+    const request = new Promise<UserPattern>((resolve, reject) => {
+      this.userPatternRequests.set(index, { resolve, reject });
+      this.post({ type: 'userPatternRequest', index });
+      this.wake();
+    })
+      .then((pattern) => {
+        this.userPatternPending.delete(index);
+        return pattern;
+      })
+      .catch((error: unknown) => {
+        this.userPatternPending.delete(index);
+        throw error;
+      });
+
+    this.userPatternPending.set(index, request);
+    return request;
+  }
+
+  /** Write a user pattern into a slot of the engine. */
+  setUserPattern(index: number, pattern: UserPattern): void {
+    this.post({ type: 'userPattern', index, pattern });
+    // A pattern that changed is not in the cache any more.
+    this.patternCache.clear();
+    this.wake();
   }
 
   async dispose(): Promise<void> {
@@ -398,6 +451,14 @@ export class PoppyEngine {
         }
         break;
       }
+      case 'userPattern': {
+        const handlers = this.userPatternRequests.get(event.index);
+        if (handlers !== undefined) {
+          this.userPatternRequests.delete(event.index);
+          handlers.resolve(event.pattern);
+        }
+        break;
+      }
       case 'error': {
         this.emitError(event.message);
         this.rejectAllPatternRequests(new Error(event.message));
@@ -417,5 +478,9 @@ export class PoppyEngine {
       handlers.reject(reason);
     }
     this.patternRequests.clear();
+    for (const handlers of this.userPatternRequests.values()) {
+      handlers.reject(reason);
+    }
+    this.userPatternRequests.clear();
   }
 }

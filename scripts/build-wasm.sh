@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPPY_REPO="${LIBPOPPY_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
-LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-ac4e6af7711866f660e7ac634d54f7ebea3e8c43}"
+LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-c98309493ce2345a693f0892fbdbb204c95f25fd}"
 LIBPOPPY_DIR="${LIBPOPPY_DIR:-$ROOT/vendor/libpoppy}"
 EMCC="${EMCC:-emcc}"
 OUT_DIR="$ROOT/build"
@@ -59,7 +59,12 @@ cat > "$OUT_DIR/version.ts" <<EOF
 export const LIBPOPPY_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
 EOF
 
-EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_panel_state","_poppy_factory_pattern"]'
+EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_panel_state","_poppy_factory_pattern","_poppy_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_seed_user_patterns","_poppy_set_user_pattern","_poppy_user_pattern"]'
+
+# The extended build of the engine: it carries the 20 user pattern slots and
+# the switch that points the sequencer at them. The panel's extended mode
+# needs them, so the macro is always on here.
+LIBPOPPY_DEFS='-DLIBPOPPY_EXTRA'
 
 # shellcheck disable=SC2086
 "$EMCC" \
@@ -67,6 +72,7 @@ EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count
     "$LIBPOPPY_DIR"/src/*.c \
     -I"$LIBPOPPY_DIR/include" \
     -I"$LIBPOPPY_DIR/src" \
+    $LIBPOPPY_DEFS \
     -std=c99 -O3 \
     --no-entry \
     -o "$OUT_DIR/poppy.mjs" \
