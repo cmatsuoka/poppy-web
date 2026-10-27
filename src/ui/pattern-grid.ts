@@ -18,6 +18,11 @@
  *
  * With `prefers-reduced-motion` the cursor jumps straight to the reported
  * column instead of gliding.
+ *
+ * The Guiro row is printed differently from the other rows. The Guiro is
+ * the only gated voice: the machine holds it open while the gate is on,
+ * so a run of hits is one continuous roll and not a row of separate
+ * notes. A run is therefore drawn as a bar with a dot at each end.
  */
 
 import type { PoppyEngine } from '../audio/engine';
@@ -40,6 +45,9 @@ const ENABLE_ALL = (1n << BigInt(PATTERN_COLUMNS)) - 1n;
 const FALLBACK_SAMPLE_RATE = 48000;
 // The Tambourine, Guiro and Quijada are the three Additional Volume voices.
 const PERCUSSION_INSTRUMENT = 12;
+// The Guiro is the gated voice: it is held open for as long as the gate
+// is on.
+const GUIRO_INSTRUMENT = 13;
 // The spoken summary stays within a reasonable length.
 const MAX_SPOKEN_COLUMNS = 16;
 
@@ -395,6 +403,10 @@ export class PatternGrid {
       this.layer.append(label);
 
       const bit = 1 << instrument;
+      if (instrument === GUIRO_INSTRUMENT) {
+        this.renderGuiroRow(pattern, centre);
+        return;
+      }
       for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
         // A disabled column is never played, so it holds no hit either.
         if (!this.isEnabled(pattern, column)) {
@@ -422,6 +434,113 @@ export class PatternGrid {
     this.updatePlayhead();
   }
 
+  /**
+   * The runs of the Guiro row, in the order the machine plays them.
+   *
+   * A run is a stretch of columns the engine visits one after the other
+   * and in which the Guiro is hit every time. The gate stays open over
+   * such a stretch, so the machine plays it as one roll. A disabled
+   * column in the middle does not break the run: the engine skips it
+   * instead of waiting for it, so the roll goes on.
+   */
+  private guiroRuns(pattern: CardPattern): number[][] {
+    const bit = 1 << GUIRO_INSTRUMENT;
+    const visited: number[] = [];
+    for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
+      if (this.isEnabled(pattern, column)) {
+        visited.push(column);
+      }
+    }
+    if (visited.length === 0) {
+      return [];
+    }
+
+    const hasGuiro = (column: number): boolean =>
+      ((pattern.notes[column] ?? 0) & bit) !== 0;
+
+    // The scan starts behind a column without a hit, so a run that runs
+    // over the end of the cycle is not cut in two.
+    const quiet = visited.findIndex((column) => !hasGuiro(column));
+    if (quiet < 0) {
+      // Every visited column is hit: the whole cycle is one run.
+      return [visited];
+    }
+    const ordered = visited
+      .slice(quiet + 1)
+      .concat(visited.slice(0, quiet + 1));
+
+    const runs: number[][] = [];
+    let run: number[] = [];
+    for (const column of ordered) {
+      if (hasGuiro(column)) {
+        run.push(column);
+        continue;
+      }
+      if (run.length > 0) {
+        runs.push(run);
+        run = [];
+      }
+    }
+    if (run.length > 0) {
+      runs.push(run);
+    }
+    return runs;
+  }
+
+  /**
+   * The parts of a run that lie next to each other on the card. A run
+   * that runs over the end of the cycle is printed as two parts.
+   */
+  private guiroParts(run: number[]): number[][] {
+    const first = run[0];
+    const last = run[run.length - 1];
+    if (first === undefined || last === undefined) {
+      return [];
+    }
+    if (first <= last) {
+      return [run];
+    }
+    const tail = run.filter((column) => column >= first);
+    const head = run.filter((column) => column <= last);
+    return [tail, head];
+  }
+
+  /**
+   * The Guiro row: a run of hits is printed as a bar with a dot at each
+   * end, so the card shows the roll the machine plays.
+   */
+  private renderGuiroRow(pattern: CardPattern, centre: number): void {
+    for (const run of this.guiroRuns(pattern)) {
+      for (const part of this.guiroParts(run)) {
+        const first = part[0];
+        const last = part[part.length - 1];
+        if (first === undefined || last === undefined) {
+          continue;
+        }
+        if (first !== last) {
+          const bar = svgElement('line', 'pattern-grid-gate');
+          bar.setAttribute('x1', String(this.columnCentre(first)));
+          bar.setAttribute('x2', String(this.columnCentre(last)));
+          bar.setAttribute('y1', String(centre));
+          bar.setAttribute('y2', String(centre));
+          this.layer.append(bar);
+        }
+        this.drawGuiroHit(first, centre);
+        if (last !== first) {
+          this.drawGuiroHit(last, centre);
+        }
+      }
+    }
+  }
+
+  private drawGuiroHit(column: number, centre: number): void {
+    const hit = svgElement('circle', 'pattern-grid-hit pattern-grid-hit--perc');
+    hit.setAttribute('cx', String(this.columnCentre(column)));
+    hit.setAttribute('cy', String(centre));
+    hit.setAttribute('r', String(HIT_RADIUS));
+    this.layer.append(hit);
+  }
+
   private describe(pattern: CardPattern): string {
     const names = pattern.rhythms
       .map((rhythm) => RHYTHM_NAMES[rhythm] ?? '')
@@ -430,6 +549,10 @@ export class PatternGrid {
       names.length > 0 ? names.join(' plus ') : 'the percussion layer only';
     const parts: string[] = [];
     for (const instrument of pattern.rows) {
+      if (instrument === GUIRO_INSTRUMENT) {
+        parts.push(this.describeGuiro(pattern));
+        continue;
+      }
       const columns: number[] = [];
       const bit = 1 << instrument;
       for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
@@ -448,6 +571,32 @@ export class PatternGrid {
       parts.push(`${INSTRUMENT_NAMES[instrument] ?? ''} on ${spoken}${rest}`);
     }
     return `Pattern display for ${title}. ${parts.join('; ')}.`;
+  }
+
+  /**
+   * The Guiro row is spoken as the rolls the machine plays, because that
+   * is how the card prints it. The rolls are named in the order of the
+   * card, not in the order the machine plays them.
+   */
+  private describeGuiro(pattern: CardPattern): string {
+    const parts: number[][] = [];
+    for (const run of this.guiroRuns(pattern)) {
+      for (const part of this.guiroParts(run)) {
+        parts.push(part);
+      }
+    }
+    parts.sort((a, b) => (a[0] ?? 0) - (b[0] ?? 0));
+
+    const spoken = parts.map((part) => {
+      const first = part[0] ?? 0;
+      const last = part[part.length - 1] ?? first;
+      return first === last ? `${first + 1}` : `${first + 1} to ${last + 1}`;
+    });
+    if (spoken.length === 0) {
+      return 'Guiro silent';
+    }
+    const rest = spoken.length > MAX_SPOKEN_COLUMNS ? ', and more' : '';
+    return `Guiro rolling over ${spoken.slice(0, MAX_SPOKEN_COLUMNS).join(', ')}${rest}`;
   }
 
   private updateMeta(): void {

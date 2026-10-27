@@ -1312,6 +1312,13 @@ body {
   fill: #2f6a8c;
 }
 
+/* The bar that joins the ends of a run of Guiro hits. */
+.pattern-grid-gate {
+  stroke: #2f6a8c;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
 .pattern-grid-label {
   fill: rgb(35 35 42 / 72%);
   font-size: 8.5px;
