@@ -292,6 +292,38 @@ body {
   white-space: nowrap;
 }
 
+/* The square button at the end of the band that puts the knobs back. */
+.write-strip-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: clamp(20px, 2.1vw, 28px);
+  height: clamp(20px, 2.1vw, 28px);
+  padding: 0;
+  border: 1px solid rgb(35 35 42 / 35%);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 12%);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.write-strip-reset:hover {
+  color: var(--ink);
+  border-color: rgb(35 35 42 / 60%);
+}
+
+.write-strip-reset:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.write-strip-reset-icon {
+  width: 65%;
+  height: 65%;
+  fill: currentcolor;
+}
+
 .faceplate {
   position: relative;
   padding: var(--plate-pad-top) var(--plate-pad) 0;

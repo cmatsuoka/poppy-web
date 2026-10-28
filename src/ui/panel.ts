@@ -2,6 +2,7 @@ import type { PoppyEngine } from '../audio/engine';
 import {
   INITIAL_PANEL_STATE,
   INSTR_HIHAT,
+  INSTR_PERCUSSION,
   INSTR_SNARE_1,
   PATTERN_ACCENT_BIT,
   PATTERN_COLUMNS,
@@ -27,14 +28,17 @@ import { UserNames } from './user-names';
 
 const Q16 = 65536;
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 /**
  * The knobs of the band under the black cover.
  *
- * The first five reach into the engine and move the parameters it holds
- * fixed today: the gain an accented column is played at, and the level,
- * the decay and the cutoff of the snare and the cutoff of the hi-hat. The
- * three knobs after them have no function of their own yet: the panel
- * keeps the room for them and waits for what they will do.
+ * The first seven reach into the engine and move the parameters it holds
+ * fixed today: the gain an accented column is played at, the level, the
+ * decay and the cutoff of the snare, the level and the cutoff of the
+ * hi-hat and the level of the percussion. The knob after them has no
+ * function of its own yet: the panel keeps the room for it and waits for
+ * what it will do.
  */
 const PANEL_KNOBS = 8;
 
@@ -45,6 +49,14 @@ const PANEL_KNOBS = 8;
  * the machine sounds the same until a knob is moved.
  */
 interface BandKnob {
+  /**
+   * The name the knob is known by.
+   *
+   * It tells the knobs apart when their positions are kept in the browser:
+   * a knob that changes its function does not come up with the position of
+   * the knob that stood there before.
+   */
+  id: string;
   /** The printed caption. */
   label: string;
   /** The name the screen reader gets. */
@@ -66,6 +78,7 @@ interface BandKnob {
 function bandKnobs(engine: PoppyEngine): BandKnob[] {
   return [
     {
+      id: 'accent',
       label: 'ACCENT',
       ariaLabel: 'Accent gain',
       min: 1,
@@ -77,6 +90,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       },
     },
     {
+      id: 'sn1-vol',
       label: 'SN1 VOL',
       ariaLabel: 'Snare 1 level',
       min: 0,
@@ -92,6 +106,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       },
     },
     {
+      id: 'sn1-decay',
       label: 'SN1 DECAY',
       ariaLabel: 'Snare 1 decay',
       min: 20,
@@ -107,6 +122,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       },
     },
     {
+      id: 'sn1-cutoff',
       label: 'SN1 CUTOFF',
       ariaLabel: 'Snare 1 cutoff',
       min: 200,
@@ -122,6 +138,23 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       },
     },
     {
+      id: 'hh-vol',
+      label: 'HH VOL',
+      ariaLabel: 'Hi-hat level',
+      min: 0,
+      max: 2,
+      value: 1,
+      valueText: (value) => `${Math.round(value * 100)}%`,
+      onInput: (value) => {
+        engine.setVoiceParam(
+          INSTR_HIHAT,
+          VOICE_PARAM.volume,
+          Math.round(value * Q16),
+        );
+      },
+    },
+    {
+      id: 'hh-cutoff',
       label: 'HH CUTOFF',
       ariaLabel: 'Hi-hat cutoff',
       min: 1000,
@@ -130,6 +163,23 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       valueText: (value) => `${(value / 1000).toFixed(1)} kHz`,
       onInput: (value) => {
         engine.setVoiceParam(INSTR_HIHAT, VOICE_PARAM.cutoff, Math.round(value));
+      },
+    },
+    {
+      id: 'perc-vol',
+      label: 'PERC VOL',
+      ariaLabel: 'Percussion level',
+      min: 0,
+      max: 2,
+      value: 1,
+      valueText: (value) => `${Math.round(value * 100)}%`,
+      onInput: (value) => {
+        // The knob moves the whole group of percussion at once: the small
+        // bongo, the large bongo, the conga, the claves and the rimshot.
+        const level = Math.round(value * Q16);
+        for (const instrument of INSTR_PERCUSSION) {
+          engine.setVoiceParam(instrument, VOICE_PARAM.volume, level);
+        }
       },
     },
   ];
@@ -246,6 +296,25 @@ function element<K extends keyof HTMLElementTagNameMap>(
     node.textContent = text;
   }
   return node;
+}
+
+/**
+ * The little arrow on the reset button of the band.
+ *
+ * It is the mark of a control that puts things back the way they came.
+ */
+function resetIcon(className: string): SVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute(
+    'd',
+    'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z',
+  );
+  svg.append(path);
+  return svg;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -833,15 +902,20 @@ export class Panel {
 
   /** The knobs of the band, and the positions they come up in. */
   private readonly bandControls: MiniKnob[] = [];
-  private readonly bandDefaults: number[] = [];
+  /** The names of the knobs of the band, in the order of the row. */
+  private readonly bandIds: string[] = [];
+  /** The positions the knobs of the band come up in, by name. */
+  private readonly bandDefaults: Record<string, number> = {};
   /**
    * The positions the user gave the knobs of the band.
    *
    * They are the settings of the user patterns: the factory rhythms are
    * played with the settings the machine comes up with, and the user
-   * patterns with the ones the user gave the knobs.
+   * patterns with the ones the user gave the knobs. They are kept by the
+   * name of the knob, so a knob that changes its function does not take
+   * the position of the knob that stood there before.
    */
-  private bandValues: number[] = [];
+  private bandValues: Record<string, number> = {};
 
   /**
    * The clipboard of the pattern editor.
@@ -995,11 +1069,12 @@ export class Panel {
   /**
    * The section of the faceplate that the black cover hides.
    *
-   * It is a row of eight knobs. The first five reach into the engine and
-   * move the parameters it holds fixed today; the three after them have no
-   * function of their own yet: the panel keeps the room for them and waits
-   * for what they will do. The user patterns are written on the pattern
-   * card, not on this strip.
+   * It is a row of eight knobs and a square button. The first seven knobs
+   * reach into the engine and move the parameters it holds fixed today; the
+   * one after them has no function of its own yet: the panel keeps the room
+   * for it and waits for what it will do. The button at the end of the row
+   * puts the knobs back where they belong. The user patterns are written on
+   * the pattern card, not on this strip.
    */
   private buildExtendedSection(): HTMLElement {
     const section = element('div', 'extended-section');
@@ -1008,6 +1083,7 @@ export class Panel {
 
     for (let index = knobs.length; index < PANEL_KNOBS; index += 1) {
       knobs.push({
+        id: `spare-${index + 1}`,
         label: String(index + 1),
         ariaLabel: `Knob ${index + 1}, no function yet`,
         min: 0,
@@ -1021,7 +1097,7 @@ export class Panel {
       });
     }
 
-    knobs.forEach((knob, index) => {
+    knobs.forEach((knob) => {
       const control = new MiniKnob({
         label: knob.label,
         min: knob.min,
@@ -1035,22 +1111,40 @@ export class Panel {
           // The panel moves the knobs itself when the source changes: that
           // is not the user giving a new setting.
           if (!this.restoring) {
-            this.bandValues[index] = value;
+            this.bandValues[knob.id] = value;
             this.keepControlPositions();
           }
         },
       });
       this.bandControls.push(control);
-      this.bandDefaults.push(knob.value);
+      this.bandIds.push(knob.id);
+      this.bandDefaults[knob.id] = knob.value;
       strip.append(control.element);
     });
 
+    // The button that puts the knobs back where they come up in. It stands
+    // at the end of the row, next to the knobs it belongs to.
+    const reset = element('button', 'write-strip-reset');
+    reset.type = 'button';
+    reset.title = 'Put the knobs of the band back where they belong';
+    reset.setAttribute('aria-label', reset.title);
+    reset.append(resetIcon('write-strip-reset-icon'));
+    reset.addEventListener('click', () => {
+      this.resetKnobs();
+    });
+    strip.append(reset);
+
     // The positions the user gave the knobs of the band. They are used
-    // again when the extended mode is engaged.
-    const stored = this.savedControls.band ?? [];
-    this.bandValues = this.bandDefaults.map(
-      (fallback, index) => stored[index] ?? fallback,
-    );
+    // again when the extended mode is engaged. A knob that was not there
+    // at the last visit comes up where it belongs.
+    const stored = this.savedControls.band ?? {};
+    this.bandValues = {};
+    for (const id of this.bandIds) {
+      const fallback = this.bandDefaults[id];
+      if (fallback !== undefined) {
+        this.bandValues[id] = stored[id] ?? fallback;
+      }
+    }
 
     section.append(strip);
     return section;
@@ -1091,11 +1185,14 @@ export class Panel {
    * knobs. The positions the user chose are kept either way: the mode
    * lever does not throw them away.
    */
-  private applyBandValues(values: number[]): void {
+  private applyBandValues(values: Record<string, number>): void {
     this.restoring = true;
     try {
-      values.forEach((value, index) => {
-        this.bandControls[index]?.set(value, true);
+      this.bandIds.forEach((id, index) => {
+        const value = values[id];
+        if (value !== undefined) {
+          this.bandControls[index]?.set(value, true);
+        }
       });
     } finally {
       this.restoring = false;
@@ -1124,14 +1221,15 @@ export class Panel {
   /**
    * Put the knobs of the band back where they belong.
    *
-   * The reset is a button of its own, and it is the only way back to the
-   * positions the machine comes up in.
+   * The square button at the end of the band and the one in the bar of the
+   * pattern editor both do it: it is the only way back to the positions the
+   * machine comes up in.
    */
   private resetKnobs(): boolean {
-    this.bandControls.forEach((control, index) => {
-      const fallback = this.bandDefaults[index];
+    this.bandIds.forEach((id, index) => {
+      const fallback = this.bandDefaults[id];
       if (fallback !== undefined) {
-        control.set(fallback, true);
+        this.bandControls[index]?.set(fallback, true);
       }
     });
     this.keepControlPositions();

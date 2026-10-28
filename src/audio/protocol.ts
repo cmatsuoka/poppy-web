@@ -62,6 +62,28 @@ export const INSTR_SNARE_1 = 1;
 export const INSTR_HIHAT = 8;
 
 /**
+ * The small bongo is the high one, the voice that stands in for the
+ * agogo of the drum kits, and the large bongo is the low one.
+ */
+export const INSTR_SMALL_BONGO = 3;
+export const INSTR_LARGE_BONGO = 4;
+export const INSTR_CONGA = 5;
+export const INSTR_CLAVES = 7;
+export const INSTR_RIMSHOT = 9;
+
+/**
+ * The percussion voices the PERC VOL knob of the band reaches for: the
+ * small bongo, the large bongo, the conga, the claves and the rimshot.
+ */
+export const INSTR_PERCUSSION = [
+  INSTR_SMALL_BONGO,
+  INSTR_LARGE_BONGO,
+  INSTR_CONGA,
+  INSTR_CLAVES,
+  INSTR_RIMSHOT,
+] as const;
+
+/**
  * The parameters of a voice the engine can move.
  *
  * The numbers are the order of the engine's own list of them, so the panel
