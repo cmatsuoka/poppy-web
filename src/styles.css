@@ -21,6 +21,10 @@
   --key-hang: 14px;
   /* The height of the write strip the black cover hides. */
   --section-height: clamp(58px, 6.6vw, 88px);
+  /* The size of a button of the memory positions of the band of knobs.
+     The square of the four buttons and the reset button next to it are
+     both built from it. */
+  --memory-size: clamp(14px, 1.5vw, 19px);
   /* The chrome of the levers: a hot band along the top, the dark band the
      horizon leaves across the middle and the bounce light along the
      bottom. */
@@ -196,8 +200,8 @@ body {
     0 1px 2px rgb(0 0 0 / 30%);
 }
 
-/* The band under the black cover: a row of knobs without a function of
-   their own yet. */
+/* The band under the black cover: a row of knobs, the memory positions
+   they live in and the button that puts them back. */
 .write-strip {
   display: flex;
   align-items: center;
@@ -292,25 +296,118 @@ body {
   white-space: nowrap;
 }
 
-/* The square button at the end of the band that puts the knobs back. */
+/*
+ * The end of the band of knobs: the memory positions of the knobs and the
+ * button that puts the knobs of the selected position back.
+ *
+ * The four memory positions stand in a square of small buttons, and the
+ * button next to them is as big as that square. It is black and not
+ * silver, and it stands a little away from the square: a finger that
+ * slips while it picks a position should not throw the settings away.
+ */
+.write-strip-tail {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: clamp(7px, 1.2vw, 18px);
+}
+
+/* The square of the four memory positions. */
+.write-strip-memories {
+  display: grid;
+  grid-template-columns: repeat(2, var(--memory-size));
+  grid-auto-rows: var(--memory-size);
+  gap: 2px;
+  flex: none;
+}
+
+.write-strip-memory {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgb(35 35 42 / 40%);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 24%);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: clamp(6px, 0.62vw, 9px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    transform 90ms ease,
+    box-shadow 90ms ease,
+    background 90ms linear;
+}
+
+.write-strip-memory:hover {
+  color: var(--ink);
+  border-color: rgb(35 35 42 / 60%);
+}
+
+/* The position the knobs stand at. */
+.write-strip-memory[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #f4f2ec;
+}
+
+/* The button goes down while the finger is on it. */
+.write-strip-memory:active {
+  transform: translateY(1px);
+  background: rgb(255 255 255 / 8%);
+  box-shadow: inset 0 2px 4px rgb(35 35 42 / 45%);
+}
+
+.write-strip-memory[aria-pressed='true']:active {
+  background: #131316;
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 70%);
+}
+
+.write-strip-memory:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The square button at the end of the band that puts the knobs of the
+   selected memory position back. It is as big as the square of the memory
+   positions next to it, and it is black. */
 .write-strip-reset {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: clamp(20px, 2.1vw, 28px);
-  height: clamp(20px, 2.1vw, 28px);
+  width: calc(var(--memory-size) * 2 + 2px);
+  height: calc(var(--memory-size) * 2 + 2px);
   padding: 0;
-  border: 1px solid rgb(35 35 42 / 35%);
+  border: 1px solid rgb(0 0 0 / 55%);
   border-radius: 2px;
-  background: rgb(255 255 255 / 12%);
-  color: var(--ink-soft);
+  background: linear-gradient(#3c3c41, #161618);
+  color: #f0eee8;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 24%),
+    inset 0 -2px 4px rgb(0 0 0 / 55%),
+    0 1px 2px rgb(0 0 0 / 35%);
   cursor: pointer;
+  transition:
+    transform 90ms ease,
+    box-shadow 90ms ease,
+    background 90ms linear;
+}
+
+/* The button goes down while the finger is on it. */
+.write-strip-reset:active {
+  transform: translateY(1px);
+  background: linear-gradient(#2c2c30, #101012);
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 75%),
+    inset 0 -1px 0 rgb(255 255 255 / 8%);
 }
 
 .write-strip-reset:hover {
-  color: var(--ink);
-  border-color: rgb(35 35 42 / 60%);
+  background: linear-gradient(#4a4a50, #202024);
+  border-color: rgb(0 0 0 / 70%);
 }
 
 .write-strip-reset:focus-visible {
@@ -319,8 +416,8 @@ body {
 }
 
 .write-strip-reset-icon {
-  width: 65%;
-  height: 65%;
+  width: 55%;
+  height: 55%;
   fill: currentcolor;
 }
 

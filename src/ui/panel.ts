@@ -43,6 +43,16 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const PANEL_KNOBS = 8;
 
 /**
+ * How many memory positions the band of knobs has.
+ *
+ * A memory position keeps the settings of the knobs: the square of four
+ * buttons at the end of the band picks the position that is in use, and
+ * the button next to it puts the knobs of that position back where they
+ * come up in. The other positions keep the settings they were given.
+ */
+const BAND_MEMORY_COUNT = 4;
+
+/**
  * The knobs of the band that have a function.
  *
  * Every one of them stands where the engine stands when it comes up, so
@@ -907,15 +917,33 @@ export class Panel {
   /** The positions the knobs of the band come up in, by name. */
   private readonly bandDefaults: Record<string, number> = {};
   /**
-   * The positions the user gave the knobs of the band.
+   * The settings the knobs of the band stand at.
    *
-   * They are the settings of the user patterns: the factory rhythms are
-   * played with the settings the machine comes up with, and the user
-   * patterns with the ones the user gave the knobs. They are kept by the
-   * name of the knob, so a knob that changes its function does not take
-   * the position of the knob that stood there before.
+   * They are the settings of the memory position that is selected: the
+   * factory rhythms are played with the settings the machine comes up
+   * with, and the user patterns with the ones of that position. They are
+   * kept by the name of the knob, so a knob that changes its function does
+   * not take the position of the knob that stood there before.
    */
-  private bandValues: Record<string, number> = {};
+  private get bandValues(): Record<string, number> {
+    return this.bandMemories[this.bandMemory] ?? {};
+  }
+
+  /**
+   * The memory positions of the knobs of the band.
+   *
+   * Every position keeps the settings of the knobs, by the name of the
+   * knob. The position that is selected is the one the knobs stand at: a
+   * knob that is turned writes into it, and the position that is picked
+   * brings its own settings to the knobs.
+   */
+  private readonly bandMemories: Record<string, number>[] = [];
+
+  /** The memory position of the knobs that is selected. */
+  private bandMemory = 0;
+
+  /** The buttons that pick the memory position of the knobs. */
+  private readonly bandMemoryButtons: HTMLButtonElement[] = [];
 
   /**
    * The clipboard of the pattern editor.
@@ -1069,12 +1097,13 @@ export class Panel {
   /**
    * The section of the faceplate that the black cover hides.
    *
-   * It is a row of eight knobs and a square button. The first seven knobs
-   * reach into the engine and move the parameters it holds fixed today; the
-   * one after them has no function of its own yet: the panel keeps the room
-   * for it and waits for what it will do. The button at the end of the row
-   * puts the knobs back where they belong. The user patterns are written on
-   * the pattern card, not on this strip.
+   * It is a row of eight knobs, a square of four buttons that pick the
+   * memory position of the knobs, and a button that puts the knobs of the
+   * selected position back. The first seven knobs reach into the engine
+   * and move the parameters it holds fixed today; the one after them has
+   * no function of its own yet: the panel keeps the room for it and waits
+   * for what it will do. The user patterns are written on the pattern
+   * card, not on this strip.
    */
   private buildExtendedSection(): HTMLElement {
     const section = element('div', 'extended-section');
@@ -1122,29 +1151,74 @@ export class Panel {
       strip.append(control.element);
     });
 
-    // The button that puts the knobs back where they come up in. It stands
-    // at the end of the row, next to the knobs it belongs to.
+    // The memory positions of the knobs. Every position keeps the
+    // settings of the knobs by the name of the knob, so a knob that
+    // changes its function does not take the settings of the knob that
+    // stood there before. A position that was not there at the last visit
+    // comes up with the settings the machine comes up with.
+    const storedMemories = this.savedControls.memories ?? [];
+    const storedMemory = this.savedControls.memory ?? 0;
+    this.bandMemory =
+      storedMemory >= 0 && storedMemory < BAND_MEMORY_COUNT ? storedMemory : 0;
+    for (let index = 0; index < BAND_MEMORY_COUNT; index += 1) {
+      const position: Record<string, number> = {};
+      const stored = storedMemories[index] ?? {};
+      for (const id of this.bandIds) {
+        const fallback = this.bandDefaults[id];
+        if (fallback !== undefined) {
+          position[id] = stored[id] ?? fallback;
+        }
+      }
+      this.bandMemories.push(position);
+    }
+    // A machine that was left before the memory positions existed keeps
+    // the settings it had: they belong to the position that is selected.
+    if (storedMemories.length === 0) {
+      const stored = this.savedControls.band ?? {};
+      for (const id of this.bandIds) {
+        const value = stored[id];
+        if (value !== undefined) {
+          this.bandValues[id] = value;
+        }
+      }
+    }
+
+    // The square of memory positions, and the button that puts the knobs
+    // of the selected position back. They stand at the end of the row,
+    // next to the knobs they belong to.
+    const tail = element('div', 'write-strip-tail');
+    const memories = element('div', 'write-strip-memories');
+    memories.setAttribute('role', 'group');
+    memories.setAttribute('aria-label', 'Memory position of the knobs');
+    for (let index = 0; index < BAND_MEMORY_COUNT; index += 1) {
+      const button = element('button', 'write-strip-memory');
+      button.type = 'button';
+      button.textContent = String(index + 1);
+      button.title = `Memory position ${index + 1} of the knobs`;
+      button.setAttribute('aria-label', button.title);
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', () => {
+        this.selectBandMemory(index);
+      });
+      this.bandMemoryButtons.push(button);
+      memories.append(button);
+    }
+    tail.append(memories);
+
+    // The button that puts the knobs of the selected memory position back
+    // where they come up in.
     const reset = element('button', 'write-strip-reset');
     reset.type = 'button';
-    reset.title = 'Put the knobs of the band back where they belong';
+    reset.title = 'Put the knobs of the selected memory position back';
     reset.setAttribute('aria-label', reset.title);
     reset.append(resetIcon('write-strip-reset-icon'));
     reset.addEventListener('click', () => {
       this.resetKnobs();
     });
-    strip.append(reset);
+    tail.append(reset);
+    strip.append(tail);
 
-    // The positions the user gave the knobs of the band. They are used
-    // again when the extended mode is engaged. A knob that was not there
-    // at the last visit comes up where it belongs.
-    const stored = this.savedControls.band ?? {};
-    this.bandValues = {};
-    for (const id of this.bandIds) {
-      const fallback = this.bandDefaults[id];
-      if (fallback !== undefined) {
-        this.bandValues[id] = stored[id] ?? fallback;
-      }
-    }
+    this.renderBandMemory();
 
     section.append(strip);
     return section;
@@ -1181,9 +1255,9 @@ export class Panel {
    * The knobs of the band follow the source.
    *
    * The factory rhythms are played with the settings the machine comes up
-   * with, and the user patterns with the settings the user gave the
-   * knobs. The positions the user chose are kept either way: the mode
-   * lever does not throw them away.
+   * with, and the user patterns with the settings of the memory position
+   * that is selected. The positions the user chose are kept either way:
+   * the mode lever does not throw them away.
    */
   private applyBandValues(values: Record<string, number>): void {
     this.restoring = true;
@@ -1197,6 +1271,45 @@ export class Panel {
     } finally {
       this.restoring = false;
     }
+  }
+
+  /**
+   * Pick the memory position the knobs stand at.
+   *
+   * The position brings its own settings to the knobs, and the engine
+   * takes them over: the user patterns are played with the settings of
+   * the position that is selected. The other positions keep the settings
+   * they were given.
+   */
+  private selectBandMemory(index: number): void {
+    if (index < 0 || index >= BAND_MEMORY_COUNT || index === this.bandMemory) {
+      return;
+    }
+    this.bandMemory = index;
+    this.renderBandMemory();
+    // The knobs move to the settings of the position, and the engine
+    // takes them over. The factory rhythms keep the settings the machine
+    // comes up with.
+    if (this.displayedSource() === PATTERN_SOURCE_USER) {
+      this.applyBandValues(this.bandValues);
+    }
+    this.keepControlPositions();
+    this.showStatus(`The knobs of memory ${index + 1} are in place`, false);
+  }
+
+  /**
+   * Show which memory position is selected.
+   *
+   * The button of the position that is in use is pressed; the others are
+   * not.
+   */
+  private renderBandMemory(): void {
+    this.bandMemoryButtons.forEach((button, index) => {
+      button.setAttribute(
+        'aria-pressed',
+        index === this.bandMemory ? 'true' : 'false',
+      );
+    });
   }
 
   /**
@@ -1214,26 +1327,34 @@ export class Panel {
     this.controlWriter.update({
       tempo: this.tempoKnob.current,
       faders: this.faders.map((fader) => fader.current),
-      band: this.bandValues,
+      band: { ...this.bandValues },
+      memories: this.bandMemories.map((memory) => ({ ...memory })),
+      memory: this.bandMemory,
     });
   }
 
   /**
-   * Put the knobs of the band back where they belong.
+   * Put the knobs of the selected memory position back where they belong.
    *
    * The square button at the end of the band and the one in the bar of the
-   * pattern editor both do it: it is the only way back to the positions the
-   * machine comes up in.
+   * pattern editor both do it: it is the only way back to the positions
+   * the machine comes up in. Only the position that is selected is put
+   * back; the other ones keep the settings they were given.
    */
   private resetKnobs(): boolean {
+    const values = this.bandValues;
     this.bandIds.forEach((id, index) => {
       const fallback = this.bandDefaults[id];
       if (fallback !== undefined) {
+        values[id] = fallback;
         this.bandControls[index]?.set(fallback, true);
       }
     });
     this.keepControlPositions();
-    this.showStatus('The knobs are back where they belong', false);
+    this.showStatus(
+      `The knobs of memory ${this.bandMemory + 1} are back where they belong`,
+      false,
+    );
     return true;
   }
 
@@ -1543,8 +1664,8 @@ export class Panel {
       // up with.
       this.applyBandValues(this.bandDefaults);
     } else {
-      // The user patterns are played with the settings the user gave the
-      // knobs of the band.
+      // The user patterns are played with the settings of the memory
+      // position that is selected.
       this.applyBandValues(this.bandValues);
     }
     this.sourceRequested = source;

@@ -365,7 +365,7 @@ export class PatternGrid {
     );
     this.resetButton = this.buildTool(
       '',
-      'Put the knobs of the band back where they belong',
+      'Put the knobs of the selected memory position back',
       () => {
         void this.runTool(this.onReset);
       },
