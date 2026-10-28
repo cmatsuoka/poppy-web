@@ -51,6 +51,73 @@ interface KeyPress {
   timer: ReturnType<typeof setTimeout>;
   /** The press is one half of a chord. */
   chord: boolean;
+  /**
+   * The place the key was when the finger went down. A press of the
+   * keyboard has no place, so it has none either.
+   */
+  footprint: Footprint | null;
+}
+
+/**
+ * The place on the panel a press belongs to.
+ *
+ * A key that is pressed travels a little, and the box the pointer can
+ * hit travels with it: a finger that rests on the lower edge of a key
+ * ends up outside the key while the key sinks into the bed. The
+ * footprint of a press is the place the key was when the finger went
+ * down, so a press that ends on the key is a press, wherever the key
+ * happens to be drawn at that moment.
+ */
+interface Footprint {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/**
+ * How far a key travels while it is pressed, in the pixels of the
+ * screen.
+ *
+ * The travel is read from the panel itself, so the number that draws
+ * the key moving is the number that tells the press where the key is.
+ * The machine is scaled down as a whole when the room is too small, so
+ * the travel of a key is scaled with it.
+ */
+function travelOf(button: HTMLElement): number {
+  const travel = parseFloat(
+    getComputedStyle(button).getPropertyValue('--travel'),
+  );
+  if (!Number.isFinite(travel) || travel <= 0) {
+    return 0;
+  }
+  const layout = button.offsetWidth;
+  if (layout === 0) {
+    return travel;
+  }
+  return travel * (button.getBoundingClientRect().width / layout);
+}
+
+/** The place a key can be pressed, with the travel of the key around it. */
+function footprintOf(button: HTMLElement): Footprint {
+  const rect = button.getBoundingClientRect();
+  const travel = travelOf(button);
+  return {
+    top: rect.top - travel,
+    bottom: rect.bottom + travel,
+    left: rect.left,
+    right: rect.right,
+  };
+}
+
+/** Whether a point lies on a footprint. */
+function onFootprint(footprint: Footprint, x: number, y: number): boolean {
+  return (
+    x >= footprint.left &&
+    x <= footprint.right &&
+    y >= footprint.top &&
+    y <= footprint.bottom
+  );
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -912,7 +979,7 @@ export class Panel {
       tick.setAttribute('aria-hidden', 'true');
       button.append(tick);
       button.addEventListener('pointerdown', (event) =>
-        this.onKeyPointerDown(index, event),
+        this.onKeyPointerDown(index, button, event),
       );
       button.addEventListener('pointerup', (event) =>
         this.onKeyPointerUp(index, event),
@@ -984,6 +1051,15 @@ export class Panel {
       );
     });
 
+    // The switch travels while it is held down, so the pointer is
+    // captured: the press belongs to the switch, even when the switch
+    // moves out from under the pointer.
+    this.startStop.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      this.startStop.setPointerCapture(event.pointerId);
+    });
     this.startStop.addEventListener('click', () => this.toggleTransport());
   }
 
@@ -1190,12 +1266,17 @@ export class Panel {
    * A finger goes down on a key. The press belongs to that finger, so a
    * second finger can hold a second key at the same time.
    */
-  private beginPointerPress(index: number, pointerId: number): void {
+  private beginPointerPress(
+    index: number,
+    pointerId: number,
+    footprint: Footprint,
+  ): void {
     const press: KeyPress = {
       index,
       long: false,
       timer: 0,
       chord: false,
+      footprint,
     };
     press.timer = setTimeout(() => {
       if (this.pointerPresses.get(pointerId) !== press) {
@@ -1250,6 +1331,7 @@ export class Panel {
       long: false,
       timer: 0,
       chord: false,
+      footprint: null,
     };
     press.timer = setTimeout(() => {
       if (this.keyPress !== press) {
@@ -1279,7 +1361,11 @@ export class Panel {
     this.endKeyPress();
   }
 
-  private onKeyPointerDown(index: number, event: PointerEvent): void {
+  private onKeyPointerDown(
+    index: number,
+    button: HTMLButtonElement,
+    event: PointerEvent,
+  ): void {
     if (event.button !== 0) {
       return;
     }
@@ -1293,8 +1379,12 @@ export class Panel {
     if (this.pointerPresses.size >= MAX_SIMULTANEOUS_KEYS) {
       return;
     }
+    // The key travels while it is held down, so the pointer is captured:
+    // the press belongs to the key that was pressed down, even when the
+    // key moves out from under the pointer.
+    button.setPointerCapture(event.pointerId);
     this.keyboardHandled = false;
-    this.beginPointerPress(index, event.pointerId);
+    this.beginPointerPress(index, event.pointerId, footprintOf(button));
   }
 
   private onKeyPointerUp(index: number, event: PointerEvent): void {
@@ -1305,6 +1395,13 @@ export class Panel {
     // A chord has latched its keys already, and a long press has done
     // its work when the timer ran.
     if (press.chord || press.long) {
+      return;
+    }
+    // A press that ends outside the key is taken back.
+    if (
+      press.footprint !== null &&
+      !onFootprint(press.footprint, event.clientX, event.clientY)
+    ) {
       return;
     }
     this.applyShortPress(index);

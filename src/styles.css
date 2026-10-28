@@ -1127,6 +1127,9 @@ body {
 
 .rhythm-key {
   position: relative;
+  /* How far the key travels while it is pressed. The panel reads this
+     number, so a press is always given to the key it was made on. */
+  --travel: 3px;
   height: clamp(34px, 4vw, 48px);
   padding: 0;
   border: 1px solid var(--key-edge);
@@ -1194,7 +1197,7 @@ body {
    not latched. The panel is seen from above, so a key that is pushed in
    travels towards the top of the screen. */
 .rhythm-key:not([aria-pressed='true']):active {
-  transform: translateY(-3px);
+  transform: translateY(calc(-1 * var(--travel)));
   box-shadow:
     0 1px 0 #a29c8f,
     0 2px 4px rgb(0 0 0 / 32%),
