@@ -74,6 +74,13 @@ interface CardPattern {
   accents: boolean[];
 }
 
+/**
+ * An action of the bar of buttons.
+ *
+ * It tells whether it worked, so that the button can say so.
+ */
+export type ToolAction = () => boolean | Promise<boolean>;
+
 /** What the card needs from the panel that owns it. */
 export interface PatternGridOptions {
   /** The names of the user patterns. */
@@ -87,6 +94,16 @@ export interface PatternGridOptions {
    * Called when a voice is put into a step of the grid, or taken out again.
    */
   onToggle?: (instrument: number, column: number, on: boolean) => void;
+  /** The pattern of the selection is emptied. */
+  onClear?: ToolAction;
+  /** The pattern of the selection is copied to the clipboard. */
+  onCopy?: ToolAction;
+  /** The pattern of the clipboard is written into the selection. */
+  onPaste?: ToolAction;
+  /** The user patterns are kept in the browser. */
+  onSave?: ToolAction;
+  /** The knobs of the band are put back where they belong. */
+  onReset?: ToolAction;
 }
 
 function svgElement<K extends keyof SVGElementTagNameMap>(
@@ -138,12 +155,24 @@ export class PatternGrid {
   private readonly description: HTMLParagraphElement;
   /** The control that opens the card to the voices that are still empty. */
   private readonly expandButton: HTMLButtonElement;
+  /** The bar of the buttons that work on the pattern. */
+  private readonly toolsRow: HTMLDivElement;
+  private readonly clearButton: HTMLButtonElement;
+  private readonly copyButton: HTMLButtonElement;
+  private readonly pasteButton: HTMLButtonElement;
+  private readonly saveButton: HTMLButtonElement;
+  private readonly resetButton: HTMLButtonElement;
 
   private readonly names: UserNames;
   private readonly onAccent: ((column: number, accent: boolean) => void) | null;
   private readonly onToggle:
     | ((instrument: number, column: number, on: boolean) => void)
     | null;
+  private readonly onClear: ToolAction | null;
+  private readonly onCopy: ToolAction | null;
+  private readonly onPaste: ToolAction | null;
+  private readonly onSave: ToolAction | null;
+  private readonly onReset: ToolAction | null;
   private readonly stopWatchingNames: () => void;
 
   private readonly views = new Map<number, PatternView>();
@@ -207,6 +236,11 @@ export class PatternGrid {
     this.names = options.names;
     this.onAccent = options.onAccent ?? null;
     this.onToggle = options.onToggle ?? null;
+    this.onClear = options.onClear ?? null;
+    this.onCopy = options.onCopy ?? null;
+    this.onPaste = options.onPaste ?? null;
+    this.onSave = options.onSave ?? null;
+    this.onReset = options.onReset ?? null;
 
     this.element = document.createElement('div');
     this.element.className = 'pattern-card';
@@ -280,6 +314,70 @@ export class PatternGrid {
     foot.className = 'pattern-card-foot';
     foot.append(this.stateRow, this.expandButton);
 
+    // The bar of the buttons that work on the pattern. It belongs to the
+    // extended mode: a factory rhythm is a print, and there is nothing to
+    // change about it.
+    //
+    // The buttons that can lose work are not next to the button that keeps
+    // it: the rule in the bar stands between them, so that a finger that
+    // slips does not clear a pattern that was written.
+    this.toolsRow = document.createElement('div');
+    this.toolsRow.className = 'pattern-card-tools';
+    this.toolsRow.hidden = true;
+
+    const group = document.createElement('div');
+    group.className = 'pattern-card-tool-group';
+
+    this.clearButton = this.buildTool(
+      'Clear',
+      'Empty the pattern of the selection',
+      () => {
+        void this.runTool(this.onClear);
+      },
+    );
+    this.copyButton = this.buildTool(
+      'Copy',
+      'Copy the pattern of the selection to the clipboard',
+      () => {
+        void this.runTool(this.onCopy, this.copyButton, 'Copied');
+      },
+    );
+    this.pasteButton = this.buildTool(
+      'Paste',
+      'Write the clipboard into the pattern of the selection',
+      () => {
+        void this.runTool(this.onPaste);
+      },
+    );
+    group.append(this.clearButton, this.copyButton, this.pasteButton);
+
+    const rule = document.createElement('span');
+    rule.className = 'pattern-card-rule';
+    rule.setAttribute('aria-hidden', 'true');
+
+    this.saveButton = this.buildTool(
+      'Save',
+      'Keep the user patterns in the browser',
+      () => {
+        void this.runTool(this.onSave, this.saveButton, 'Saved');
+      },
+      'pattern-card-tool--save',
+    );
+    this.resetButton = this.buildTool(
+      '',
+      'Put the knobs of the band back where they belong',
+      () => {
+        void this.runTool(this.onReset);
+      },
+      'pattern-card-tool--reset',
+    );
+    this.resetButton.append(this.buildResetIcon());
+
+    this.toolsRow.append(group, rule, this.saveButton, this.resetButton);
+
+    // There is nothing to paste before something has been copied.
+    this.setClipboard(false);
+
     // The spoken description of the pattern. In the extended mode the grid
     // itself carries the accent row, which a screen reader has to reach,
     // so the drawing is hidden and the description is read out instead.
@@ -287,7 +385,7 @@ export class PatternGrid {
     this.description.className = 'visually-hidden';
     this.description.id = 'pattern-card-description';
 
-    this.element.append(head, this.body, foot, this.description);
+    this.element.append(head, this.body, foot, this.toolsRow, this.description);
     host.append(this.element);
 
     // The grid is a switchboard in the extended mode: a click puts a voice
@@ -362,6 +460,87 @@ export class PatternGrid {
       cancelAnimationFrame(this.frame);
       this.frame = 0;
     }
+  }
+
+  /**
+   * Tell the card that the pattern is not in the browser yet.
+   *
+   * The patterns are only kept when the save button is pressed, so the
+   * button carries a mark while the work is not safe yet.
+   */
+  setUnsaved(unsaved: boolean): void {
+    this.saveButton.classList.toggle('is-unsaved', unsaved);
+    this.saveButton.title = unsaved
+      ? 'Keep the user patterns in the browser'
+      : 'The user patterns are in the browser';
+  }
+
+  /** Tell the card whether there is something to paste. */
+  setClipboard(hasContent: boolean): void {
+    this.pasteButton.disabled = !hasContent;
+  }
+
+  /** One of the buttons of the bar. */
+  private buildTool(
+    label: string,
+    title: string,
+    onClick: () => void,
+    className = '',
+  ): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = `pattern-card-tool ${className}`.trim();
+    button.type = 'button';
+    button.textContent = label;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  /** The little arrow on the reset button. */
+  private buildResetIcon(): SVGElement {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'pattern-card-tool-icon');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute(
+      'd',
+      'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z',
+    );
+    svg.append(path);
+    return svg;
+  }
+
+  /**
+   * Carry out an action of the bar and tell the user that it worked.
+   *
+   * The label of the button is the confirmation, and it goes back to what
+   * it was when the moment is over.
+   */
+  private async runTool(
+    action: ToolAction | null,
+    button?: HTMLButtonElement,
+    done?: string,
+  ): Promise<void> {
+    if (action === null) {
+      return;
+    }
+    const worked = await action();
+    if (worked && button !== undefined && done !== undefined) {
+      this.flash(button, done);
+    }
+  }
+
+  /** Say that an action has been carried out. */
+  private flash(button: HTMLButtonElement, text: string): void {
+    const label = button.textContent;
+    button.textContent = text;
+    button.classList.add('is-done');
+    window.setTimeout(() => {
+      button.textContent = label;
+      button.classList.remove('is-done');
+    }, 1600);
   }
 
   /**
@@ -584,6 +763,10 @@ export class PatternGrid {
 
     this.layer.replaceChildren();
 
+    // The bar of the buttons and the control that opens the card belong to
+    // the extended mode.
+    this.renderTools();
+
     if (pattern === null) {
       this.cursorLayer.setAttribute('display', 'none');
       this.svg.setAttribute(
@@ -775,7 +958,6 @@ export class PatternGrid {
       this.svg.setAttribute('aria-describedby', this.description.id);
       this.layer.setAttribute('aria-hidden', 'true');
       this.description.textContent = `Pattern grid. ${this.describe(pattern)}`;
-      this.expandButton.hidden = false;
       return;
     }
 
@@ -784,7 +966,18 @@ export class PatternGrid {
     this.svg.setAttribute('aria-label', this.describe(pattern));
     this.svg.removeAttribute('aria-describedby');
     this.layer.removeAttribute('aria-hidden');
-    this.expandButton.hidden = true;
+  }
+
+  /**
+   * The controls that belong to the extended mode.
+   *
+   * A factory rhythm is a print: there is nothing to open it with and
+   * nothing to change about it.
+   */
+  private renderTools(): void {
+    const extended = this.source === PATTERN_SOURCE_USER;
+    this.expandButton.hidden = !extended;
+    this.toolsRow.hidden = !extended;
   }
 
   /** The step of the grid a click or a key belongs to. */

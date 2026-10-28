@@ -9,6 +9,7 @@ import {
   type PatternSource,
   type PatternView,
   type UserPattern,
+  type VoiceParam,
 } from './protocol';
 
 const Q16 = 65536;
@@ -19,6 +20,10 @@ interface Settings {
   volume: number;
   balance: number;
   instrGain: number[];
+  /** The gain an accented column is played at, Q16. */
+  accentGain: number;
+  /** The parameters of the voices that have been moved, by instrument. */
+  voiceParams: Map<number, Map<VoiceParam, number>>;
 }
 
 /**
@@ -49,6 +54,10 @@ function defaultSettings(): Settings {
     volume: 2 * Q16,
     balance: Q16 / 2,
     instrGain,
+    // The engine's own accent gain: 1.2 times the level of a column that
+    // is not accented.
+    accentGain: Math.round((6 * Q16) / 5),
+    voiceParams: new Map<number, Map<VoiceParam, number>>(),
   };
 }
 
@@ -192,6 +201,33 @@ export class PoppyEngine {
     }
     this.settings.instrGain[instrument] = value;
     this.post({ type: 'instrGain', instrument, value });
+    this.wake();
+  }
+
+  /**
+   * Move one parameter of one voice: the level, the attack, the decay, the
+   * centre of the band-pass, the corner of the high-pass or the resonance
+   * of the band-pass. The value is in the unit the engine uses for that
+   * parameter.
+   */
+  setVoiceParam(instrument: number, param: VoiceParam, value: number): void {
+    let params = this.settings.voiceParams.get(instrument);
+    if (params === undefined) {
+      params = new Map<VoiceParam, number>();
+      this.settings.voiceParams.set(instrument, params);
+    }
+    params.set(param, value);
+    this.post({ type: 'voiceParam', instrument, param, value });
+    this.wake();
+  }
+
+  /**
+   * The gain an accented column of a user pattern is played at, Q16.
+   * 65536 is 1.0, and the engine starts at 1.2.
+   */
+  setAccentGain(value: number): void {
+    this.settings.accentGain = value;
+    this.post({ type: 'accentGain', value });
     this.wake();
   }
 
@@ -411,6 +447,12 @@ export class PoppyEngine {
     this.post({ type: 'balance', value: this.settings.balance });
     this.settings.instrGain.forEach((value, instrument) => {
       this.post({ type: 'instrGain', instrument, value });
+    });
+    this.post({ type: 'accentGain', value: this.settings.accentGain });
+    this.settings.voiceParams.forEach((params, instrument) => {
+      params.forEach((value, param) => {
+        this.post({ type: 'voiceParam', instrument, param, value });
+      });
     });
   }
 

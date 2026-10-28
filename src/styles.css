@@ -269,10 +269,11 @@ body {
   outline-offset: 3px;
 }
 
+/* The caption of a knob of the band. */
 .mini-caption {
   font-size: clamp(5px, 0.52vw, 7px);
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-soft);
   white-space: nowrap;
@@ -1747,6 +1748,111 @@ body {
 
 .pattern-card-expand[hidden] {
   display: none;
+}
+
+/* The bar of the buttons that work on the pattern of the card.
+ *
+ * The buttons that can throw work away are not next to the button that
+ * keeps it: the rule in the bar stands between them, so that a finger
+ * that slips does not clear a pattern that was written. */
+.pattern-card-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: clamp(4px, 0.7vw, 10px);
+  margin-top: clamp(4px, 0.6vw, 8px);
+}
+
+.pattern-card-tools[hidden] {
+  display: none;
+}
+
+/* The buttons that change the pattern stand together. */
+.pattern-card-tool-group {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, 0.7vw, 10px);
+}
+
+/* The rule between the buttons that change the pattern and the button
+   that keeps it. */
+.pattern-card-rule {
+  width: 1px;
+  height: 1.4em;
+  background: rgb(35 35 42 / 30%);
+}
+
+.pattern-card-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.4em;
+  padding: 0.25em 0.6em;
+  border: 1px solid rgb(35 35 42 / 30%);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: clamp(7px, 0.68vw, 9.5px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pattern-card-tool:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: rgb(35 35 42 / 55%);
+}
+
+.pattern-card-tool:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.pattern-card-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* The button that keeps the pattern in the browser is the one the eye
+   goes to: it is the only one that is filled. */
+.pattern-card-tool--save {
+  border-color: rgb(35 35 42 / 55%);
+  background: rgb(35 35 42 / 9%);
+  color: var(--ink);
+}
+
+/* The mark of a pattern that is not in the browser yet. */
+.pattern-card-tool--save.is-unsaved::after {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 0.55em;
+  border-radius: 50%;
+  background: var(--red-ink);
+}
+
+/* A button that has just done its work. */
+.pattern-card-tool.is-done {
+  color: var(--ink);
+  border-color: rgb(35 35 42 / 60%);
+}
+
+/* The square button that puts the knobs back. */
+.pattern-card-tool--reset {
+  min-width: 0;
+  width: 2em;
+  height: 2em;
+  padding: 0;
+}
+
+.pattern-card-tool-icon {
+  width: 1.1em;
+  height: 1.1em;
+  fill: currentcolor;
 }
 
 /* For the things a screen reader has to read out but nobody has to see. */

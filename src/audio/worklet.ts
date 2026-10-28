@@ -304,6 +304,17 @@ class PoppyProcessor extends AudioWorkletProcessor {
           command.value,
         );
         break;
+      case 'voiceParam':
+        module._poppy_set_voice_param(
+          this.context,
+          command.instrument,
+          command.param,
+          command.value,
+        );
+        break;
+      case 'accentGain':
+        module._poppy_set_accent_gain(this.context, command.value);
+        break;
       case 'pattern':
         this.sendPattern(command.rhythm);
         break;

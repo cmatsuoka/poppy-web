@@ -112,6 +112,29 @@ WASM_EXPORT void poppy_set_instr_gain(void *ctx, int32_t instrument, int32_t q16
     mp7_set_instr_gain(ctx, (mp7_instr)instrument, q16);
 }
 
+/* Move one parameter of one voice: the level, the attack, the decay, the
+ * centre of the band-pass, the corner of the high-pass or the resonance of
+ * the band-pass. Returns 1 when the engine took the value and 0 when it
+ * refused it. */
+WASM_EXPORT int32_t poppy_set_voice_param(void *ctx,
+                                           int32_t instrument,
+                                           int32_t param,
+                                           int32_t value)
+{
+    return mp7_set_voice_param(ctx,
+                                (mp7_instr)instrument,
+                                (mp7_voice_param)param,
+                                value)
+               ? 1
+               : 0;
+}
+
+/* The gain an accented column of a user pattern is played at, Q16. */
+WASM_EXPORT void poppy_set_accent_gain(void *ctx, int32_t q16)
+{
+    mp7_set_accent_gain(ctx, q16);
+}
+
 WASM_EXPORT int32_t *poppy_panel_state(const void *ctx)
 {
     struct mp7_panel_state s;

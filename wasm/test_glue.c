@@ -46,6 +46,25 @@ static int peak(const int16_t *samples, int count)
     return loudest;
 }
 
+/* Put a user pattern into a slot and select it. The reset comes first, so
+ * the pattern starts at the same place in every render. */
+static void prepare_pattern(void *ctx, int slot, const uint16_t *notes)
+{
+    poppy_reset(ctx);
+    poppy_set_pattern_source(ctx, 1);
+    poppy_set_user_pattern(ctx, slot, (int32_t)(uintptr_t)notes, -1, -1, 64, 0);
+    poppy_select_rhythm(ctx, 0, 1 << slot);
+}
+
+/* Render the pattern that is selected. The count is in samples: a block of
+ * 512 frames is 1024 samples of stereo. */
+static void render(void *ctx, int16_t *out, int samples)
+{
+    for (int i = 0; i < samples / 1024; i++) {
+        poppy_process(ctx, out + i * 1024, 512);
+    }
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -177,6 +196,124 @@ int main(void)
     check(panel[8] == 1, "the panel state reports the user source");
     poppy_set_pattern_source(ctx, 0);
     check(poppy_get_pattern_source(ctx) == 0, "the source is the preset source");
+
+    /* The accent gain is the engine's own: an accented column is played at
+     * the gain the engine was given. Two renders that differ only in that
+     * gain are compared with each other. */
+    static int16_t plain_accent[20480];
+    static int16_t unity_accent[20480];
+    static int16_t loud_accent[20480];
+
+    for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
+        notes[column] = (uint16_t)(1u << 0);
+    }
+    prepare_pattern(ctx, 8, notes);
+    render(ctx, plain_accent, 20480);
+
+    for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
+        notes[column] = (uint16_t)((1u << 0) | MP7_PATTERN_ACCENT);
+    }
+    prepare_pattern(ctx, 8, notes);
+    poppy_set_accent_gain(ctx, 65536);
+    render(ctx, unity_accent, 20480);
+
+    prepare_pattern(ctx, 8, notes);
+    poppy_set_accent_gain(ctx, 2 * 65536);
+    render(ctx, loud_accent, 20480);
+
+    check(memcmp(plain_accent, unity_accent, sizeof(plain_accent)) == 0,
+          "an accent at unity plays like no accent at all");
+    check(peak(loud_accent, 20480) > peak(unity_accent, 20480),
+          "a higher accent gain is louder");
+
+    /* The adjustable parameters of a voice: the level, the decay and the
+     * centre of the band-pass. The snare is the voice the band of knobs
+     * reaches for. */
+    static uint16_t snare_notes[MP7_USER_PATTERN_COLUMNS];
+    static int16_t snare[20480];
+    static int16_t muted[20480];
+    static int16_t dark[20480];
+
+    for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
+        snare_notes[column] = (uint16_t)(1u << 1);
+    }
+
+    prepare_pattern(ctx, 9, snare_notes);
+    render(ctx, snare, 20480);
+    check(peak(snare, 20480) > 0, "the snare is heard");
+
+    prepare_pattern(ctx, 9, snare_notes);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_VOLUME, 0) == 1,
+          "the level of a voice can be moved");
+    render(ctx, muted, 20480);
+    check(peak(muted, 20480) == 0, "a voice at level zero is silent");
+
+    prepare_pattern(ctx, 9, snare_notes);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 800) == 1,
+          "the cutoff of a voice can be moved");
+    render(ctx, dark, 20480);
+    check(memcmp(dark, snare, sizeof(snare)) != 0,
+          "a lower cutoff changes the voice");
+
+    prepare_pattern(ctx, 9, snare_notes);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_DECAY, 200000) == 1,
+          "the decay of a voice can be moved");
+    render(ctx, dark, 20480);
+    check(memcmp(dark, snare, sizeof(snare)) != 0,
+          "a shorter decay changes the voice");
+
+    /* A value outside the range of the parameter, an instrument that does
+     * not exist and a parameter that does not exist are all refused. */
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 0) == 0,
+          "a cutoff below the range is refused");
+    check(poppy_set_voice_param(ctx, 99, MP7_VOICE_CUTOFF, 5000) == 0,
+          "an instrument that does not exist is refused");
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, 99, 5000) == 0,
+          "a parameter that does not exist is refused");
+
+    /* A knob that is turned while the voice is ringing does not make the
+     * note click: the level fades into its new value, and the other
+     * parameters wait for the next note of the voice. */
+    static int16_t ringing[20480];
+    static int16_t fading[1024];
+    static int16_t faded[40960];
+
+    prepare_pattern(ctx, 9, snare_notes);
+    render(ctx, ringing, 20480);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_VOLUME, 0) == 1,
+          "the level of a voice can be moved while it rings");
+    render(ctx, fading, 1024);
+    check(peak(fading, 1024) > 0,
+          "a level that is moved while the voice rings fades out");
+
+    render(ctx, faded, 40960);
+    check(peak(faded + 38912, 2048) == 0,
+          "the level of the voice reaches its target");
+
+    /* A parameter that is not the level waits for the next note: the note
+     * that is sounding keeps the settings it started with. */
+    static int16_t before[2048];
+    static int16_t after[2048];
+
+    poppy_reset(ctx);
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, before, 2048);
+
+    poppy_reset(ctx);
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 900) == 1,
+          "the cutoff of a voice can be moved while it rings");
+    render(ctx, after, 2048);
+    check(memcmp(before, after, sizeof(before)) == 0,
+          "a note that is sounding keeps its cutoff");
+
+    poppy_reset(ctx);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 900) == 1,
+          "the cutoff of a voice can be moved");
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, after, 2048);
+    check(memcmp(before, after, sizeof(before)) != 0,
+          "the next note of a voice takes the parameters that were moved");
 
     poppy_destroy(ctx);
     printf("%s\n",

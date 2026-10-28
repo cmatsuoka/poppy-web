@@ -20,6 +20,13 @@ declare module '*poppy.mjs' {
     _poppy_set_volume(ctx: number, q16: number): void;
     _poppy_set_balance(ctx: number, q16: number): void;
     _poppy_set_instr_gain(ctx: number, instrument: number, q16: number): void;
+    _poppy_set_voice_param(
+      ctx: number,
+      instrument: number,
+      param: number,
+      value: number,
+    ): number;
+    _poppy_set_accent_gain(ctx: number, q16: number): void;
     _poppy_panel_state(ctx: number): number;
     _poppy_factory_pattern(rhythm: number): number;
     _poppy_pattern(ctx: number, rhythm: number): number;

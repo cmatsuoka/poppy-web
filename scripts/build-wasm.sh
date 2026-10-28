@@ -33,7 +33,27 @@ if [ ! -d "$LIBPOPPY_DIR/.git" ]; then
 fi
 
 git -C "$LIBPOPPY_DIR" fetch --depth 1 origin "$LIBPOPPY_COMMIT"
-git -C "$LIBPOPPY_DIR" checkout --detach "$LIBPOPPY_COMMIT"
+# The checkout is forced: the tree carries the local patches below, and a
+# pinned commit that moves on would otherwise run into them.
+git -C "$LIBPOPPY_DIR" checkout --force --detach "$LIBPOPPY_COMMIT"
+
+# The local patches. They are applied to the fetched checkout, so every
+# machine builds the same engine. A patch that does not apply is an error:
+# it has to be rebased on the pinned commit first.
+PATCH_DIR="$ROOT/patches"
+if [ -d "$PATCH_DIR" ]; then
+    for patch in "$PATCH_DIR"/*.patch; do
+        [ -e "$patch" ] || continue
+        name="$(basename "$patch")"
+        if ! git -C "$LIBPOPPY_DIR" apply --check "$patch" >/dev/null 2>&1; then
+            echo "error: the patch does not apply to the pinned engine: $name" >&2
+            echo "       rebase it on $LIBPOPPY_COMMIT and try again" >&2
+            exit 1
+        fi
+        git -C "$LIBPOPPY_DIR" apply "$patch"
+        echo "applied $name"
+    done
+fi
 
 mkdir -p "$OUT_DIR"
 
@@ -59,7 +79,7 @@ cat > "$OUT_DIR/version.ts" <<EOF
 export const LIBPOPPY_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
 EOF
 
-EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_panel_state","_poppy_factory_pattern","_poppy_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_seed_user_patterns","_poppy_set_user_pattern","_poppy_user_pattern"]'
+EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_voice_param","_poppy_set_accent_gain","_poppy_panel_state","_poppy_factory_pattern","_poppy_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_seed_user_patterns","_poppy_set_user_pattern","_poppy_user_pattern"]'
 
 # The extended build of the engine: it carries the 20 user pattern slots and
 # the switch that points the sequencer at them. The panel's extended mode

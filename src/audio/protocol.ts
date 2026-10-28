@@ -55,6 +55,32 @@ export const RHYTHM_COUNT = RHYTHM_NAMES.length;
 export const RHYTHM_BUTTON_COUNT = 10;
 
 /**
+ * The instruments the band of knobs reaches for, in the engine's voice
+ * order: the snare is the second voice, the hi-hat the ninth.
+ */
+export const INSTR_SNARE_1 = 1;
+export const INSTR_HIHAT = 8;
+
+/**
+ * The parameters of a voice the engine can move.
+ *
+ * The numbers are the order of the engine's own list of them, so the panel
+ * and the engine speak the same names. The units are the ones the engine
+ * uses: Q16 for the volume, microseconds for the times, Hz for the
+ * frequencies and Q8.8 for the resonance.
+ */
+export const VOICE_PARAM = {
+  volume: 0,
+  attack: 1,
+  decay: 2,
+  cutoff: 3,
+  highpass: 4,
+  resonance: 5,
+} as const;
+
+export type VoiceParam = (typeof VOICE_PARAM)[keyof typeof VOICE_PARAM];
+
+/**
  * The accent flag of a pattern column.
  *
  * The fifteen instruments fill the lower fifteen bits of a column, so the
@@ -120,6 +146,8 @@ export type EngineCommand =
   | { type: 'volume'; value: number }
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }
+  | { type: 'voiceParam'; instrument: number; param: VoiceParam; value: number }
+  | { type: 'accentGain'; value: number }
   | { type: 'pattern'; rhythm: number }
   | { type: 'source'; source: PatternSource }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
