@@ -43,6 +43,13 @@ const LONG_PRESS_MS = 500;
  */
 const MAX_SIMULTANEOUS_KEYS = 2;
 
+/**
+ * How long the names on the key bed are gone before the new ones are
+ * written. The names fade out, the new ones take their place while they
+ * cannot be seen, and they fade in again.
+ */
+const LEGEND_FADE_MS = 120;
+
 /** A key that is being held down. */
 interface KeyPress {
   index: number;
@@ -625,6 +632,15 @@ export class Panel {
   // place of the factory names on the key bed.
   private readonly userNames = new UserNames();
 
+  // The source the names on the key bed belong to. When it changes, the
+  // names are replaced with a fade.
+  private legendSource: PatternSource = PATTERN_SOURCE_PRESET;
+
+  // The names on the key bed are being replaced: the old ones fade out
+  // and the new ones come in.
+  private legendFading = false;
+  private legendTimer: ReturnType<typeof setTimeout> | null = null;
+
   // The band under the black cover: the row of knobs.
   private extendedSection!: HTMLElement;
 
@@ -1076,6 +1092,9 @@ export class Panel {
     }
     this.sourceRequested = source;
     this.renderSource();
+    // The names on the key bed follow the source, so they are replaced
+    // right away: the print of the machine changes with the lever.
+    this.renderSelection();
     this.engine.setSource(source);
     this.showStatus(
       source === PATTERN_SOURCE_USER
@@ -1653,18 +1672,85 @@ export class Panel {
       row.forEach((name, index) => {
         const latched = rowIndex === bank && (buttons & (1 << index)) !== 0;
         name.classList.toggle('is-selected', latched);
-        const text = this.keyName(rowIndex * RHYTHM_BUTTON_COUNT + index);
-        if (name.textContent !== text) {
-          name.textContent = text;
-        }
       });
     });
+
+    // The names on the key bed follow the source. When it changes, they
+    // are replaced with a fade, so the print of the machine does not
+    // change in one hard cut.
+    const source = this.displayedSource();
+    if (source !== this.legendSource) {
+      this.legendSource = source;
+      this.fadeLegendNames();
+    } else if (!this.legendFading) {
+      this.writeLegendNames();
+    }
 
     this.legendRows[0]?.classList.toggle('active', bank === 0);
     this.legendRows[1]?.classList.toggle('active', bank === 1);
     this.bankSwitch.setAttribute('aria-checked', bank === 1 ? 'true' : 'false');
 
     this.renderSource();
+  }
+
+  /**
+   * The names printed on the key bed.
+   *
+   * In the preset mode the key bed carries the names of the factory
+   * rhythms, in the extended mode the names of the user patterns.
+   */
+  private writeLegendNames(): void {
+    this.legendNames.forEach((row, rowIndex) => {
+      row.forEach((name, index) => {
+        const text = this.keyName(rowIndex * RHYTHM_BUTTON_COUNT + index);
+        if (name.textContent !== text) {
+          name.textContent = text;
+        }
+      });
+    });
+  }
+
+  /**
+   * Replace the names on the key bed with a short fade.
+   *
+   * The names of the factory rhythms and the names of the user patterns
+   * take each other's place. A plain swap is harsh, so the old names fade
+   * out, the new ones are written while they cannot be seen, and they come
+   * in again.
+   */
+  private fadeLegendNames(): void {
+    this.clearLegendTimer();
+
+    const names = this.legendNames.flat();
+
+    if (this.reducedMotion.matches) {
+      this.legendFading = false;
+      for (const name of names) {
+        name.classList.remove('is-fading');
+      }
+      this.writeLegendNames();
+      return;
+    }
+
+    this.legendFading = true;
+    for (const name of names) {
+      name.classList.add('is-fading');
+    }
+    this.legendTimer = setTimeout(() => {
+      this.legendTimer = null;
+      this.legendFading = false;
+      this.writeLegendNames();
+      for (const name of names) {
+        name.classList.remove('is-fading');
+      }
+    }, LEGEND_FADE_MS);
+  }
+
+  private clearLegendTimer(): void {
+    if (this.legendTimer !== null) {
+      clearTimeout(this.legendTimer);
+      this.legendTimer = null;
+    }
   }
 
   /**

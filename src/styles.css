@@ -1082,7 +1082,10 @@ body {
   color: var(--ink);
   opacity: 0.8;
   border-radius: 2px;
-  transition: opacity 120ms linear, background 120ms linear, color 120ms linear;
+  transition:
+    opacity 120ms ease,
+    background 120ms linear,
+    color 120ms linear;
 }
 
 .legend-b .legend-name {
@@ -1101,6 +1104,20 @@ body {
 .legend-b .legend-name.is-selected {
   background: var(--red-ink);
   color: #f7ece8;
+}
+
+/*
+ * The source changes and the names on the key bed are replaced: the names
+ * of the factory rhythms by the names of the user patterns, or the other
+ * way round. The names fade out, the new ones take their place and fade
+ * in again, so the print does not change in one hard cut.
+ */
+.rhythm-legend .legend-name.is-fading {
+  opacity: 0;
+  transition:
+    opacity 90ms ease-in,
+    background 120ms linear,
+    color 120ms linear;
 }
 
 .legend-spacer {
