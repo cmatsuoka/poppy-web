@@ -63,10 +63,11 @@ export const RHYTHM_BUTTON_COUNT = 10;
 
 /**
  * The instruments the band of knobs reaches for, in the engine's voice
- * order: the snare is the second voice, the hi-hat the ninth.
+ * order: the bass is the first voice and the quijada the last.
  */
+export const INSTR_BASS = 0;
 export const INSTR_SNARE_1 = 1;
-export const INSTR_HIHAT = 8;
+export const INSTR_SNARE_2 = 2;
 
 /**
  * The small bongo is the high one, the voice that stands in for the
@@ -77,7 +78,13 @@ export const INSTR_LARGE_BONGO = 4;
 export const INSTR_CONGA = 5;
 export const INSTR_COWBELL = 6;
 export const INSTR_CLAVES = 7;
+export const INSTR_HIHAT = 8;
 export const INSTR_RIMSHOT = 9;
+export const INSTR_CYMBAL_1 = 10;
+export const INSTR_CYMBAL_2 = 11;
+export const INSTR_TAMBORINE = 12;
+export const INSTR_GUIRO = 13;
+export const INSTR_QUIJADA = 14;
 
 /**
  * The percussion voices the PERC VOL knob of the band reaches for: the
@@ -99,7 +106,8 @@ export const INSTR_PERCUSSION = [
  * The numbers are the order of the engine's own list of them, so the panel
  * and the engine speak the same names. The units are the ones the engine
  * uses: Q16 for the volume, microseconds for the times, Hz for the
- * frequencies and Q8.8 for the resonance.
+ * frequencies, Q8.8 for the resonance and Q16 for the place of the voice
+ * in the stereo field.
  */
 export const VOICE_PARAM = {
   volume: 0,
@@ -108,6 +116,7 @@ export const VOICE_PARAM = {
   cutoff: 3,
   highpass: 4,
   resonance: 5,
+  pan: 6,
 } as const;
 
 export type VoiceParam = (typeof VOICE_PARAM)[keyof typeof VOICE_PARAM];
@@ -180,6 +189,7 @@ export type EngineCommand =
   | { type: 'instrGain'; instrument: number; value: number }
   | { type: 'voiceParam'; instrument: number; param: VoiceParam; value: number }
   | { type: 'accentGain'; value: number }
+  | { type: 'spread'; value: number }
   | { type: 'pattern'; rhythm: number }
   | { type: 'source'; source: PatternSource }
   | { type: 'userPattern'; index: number; pattern: UserPattern }

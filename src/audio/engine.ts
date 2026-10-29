@@ -22,6 +22,8 @@ interface Settings {
   instrGain: number[];
   /** The gain an accented column is played at, Q16. */
   accentGain: number;
+  /** The spread of the instruments over the stereo field, -1 to 1. */
+  spread: number;
   /** The parameters of the voices that have been moved, by instrument. */
   voiceParams: Map<number, Map<VoiceParam, number>>;
 }
@@ -57,6 +59,9 @@ function defaultSettings(): Settings {
     // The engine's own accent gain: 1.2 times the level of a column that
     // is not accented.
     accentGain: Math.round((6 * Q16) / 5),
+    // The instruments stand in the centre of the stereo field, the way
+    // the engine comes up.
+    spread: 0,
     voiceParams: new Map<number, Map<VoiceParam, number>>(),
   };
 }
@@ -228,6 +233,21 @@ export class PoppyEngine {
   setAccentGain(value: number): void {
     this.settings.accentGain = value;
     this.post({ type: 'accentGain', value });
+    this.wake();
+  }
+
+  /**
+   * Spread the instruments over the stereo field.
+   *
+   * The knob stands between -1 and 1: at zero every instrument is in the
+   * centre of the field, at one every instrument stands as far to its own
+   * side as it goes, and below zero the whole field is mirrored. The
+   * instruments that stay in the centre are not touched.
+   */
+  setStereoSpread(value: number): void {
+    const spread = Math.min(1, Math.max(-1, value));
+    this.settings.spread = spread;
+    this.post({ type: 'spread', value: spread });
     this.wake();
   }
 
@@ -449,6 +469,7 @@ export class PoppyEngine {
       this.post({ type: 'instrGain', instrument, value });
     });
     this.post({ type: 'accentGain', value: this.settings.accentGain });
+    this.post({ type: 'spread', value: this.settings.spread });
     this.settings.voiceParams.forEach((params, instrument) => {
       params.forEach((value, param) => {
         this.post({ type: 'voiceParam', instrument, param, value });

@@ -7,11 +7,13 @@ import {
   INITIAL_PANEL_STATE,
   INITIAL_SELECTION,
   PATTERN_COLUMNS,
+  VOICE_PARAM,
   type EngineCommand,
   type EngineEvent,
   type PanelState,
   type PatternView,
 } from './protocol';
+import { SPREAD_INSTRUMENTS, spreadPanQ16 } from './spread';
 
 const BLOCK_FRAMES = 128;
 const PANEL_INTERVAL = Math.max(1, Math.round(sampleRate / 20));
@@ -315,6 +317,20 @@ class PoppyProcessor extends AudioWorkletProcessor {
       case 'accentGain':
         module._poppy_set_accent_gain(this.context, command.value);
         break;
+      case 'spread': {
+        // Every instrument that is spread moves to its own place in the
+        // stereo field. The instruments that stay in the centre are not
+        // touched at all.
+        for (const instrument of SPREAD_INSTRUMENTS) {
+          module._poppy_set_voice_param(
+            this.context,
+            instrument,
+            VOICE_PARAM.pan,
+            spreadPanQ16(command.value, instrument),
+          );
+        }
+        break;
+      }
       case 'pattern':
         this.sendPattern(command.rhythm);
         break;

@@ -45,9 +45,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * The first seven reach into the engine and move the parameters it holds
  * fixed today: the gain an accented column is played at, the level, the
  * decay and the cutoff of the snare, the level and the cutoff of the
- * hi-hat and the level of the percussion. The knob after them has no
- * function of its own yet: the panel keeps the room for it and waits for
- * what it will do.
+ * hi-hat and the level of the percussion. The knob after them spreads the
+ * instruments over the stereo field.
  */
 const PANEL_KNOBS = 8;
 
@@ -200,6 +199,27 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
         for (const instrument of INSTR_PERCUSSION) {
           engine.setVoiceParam(instrument, VOICE_PARAM.volume, level);
         }
+      },
+    },
+    {
+      id: 'spread',
+      label: 'PAN SPREAD',
+      ariaLabel: 'Stereo spread of the instruments',
+      min: -1,
+      max: 1,
+      value: 0,
+      valueText: (value) => {
+        const percent = Math.round(Math.abs(value) * 100);
+        if (percent === 0) {
+          return '0%';
+        }
+        return `${value < 0 ? '-' : '+'}${percent}%`;
+      },
+      onInput: (value) => {
+        // The knob spreads the instruments over the stereo field: every
+        // instrument moves from the centre towards the side it belongs
+        // to, and below zero the whole field is mirrored.
+        engine.setStereoSpread(value);
       },
     },
   ];
@@ -1114,10 +1134,9 @@ export class Panel {
    * It is a row of eight knobs, a square of four buttons that pick the
    * memory position of the knobs, and a button that puts the knobs of the
    * selected position back. The first seven knobs reach into the engine
-   * and move the parameters it holds fixed today; the one after them has
-   * no function of its own yet: the panel keeps the room for it and waits
-   * for what it will do. The user patterns are written on the pattern
-   * card, not on this strip.
+   * and move the parameters it holds fixed today; the one after them
+   * spreads the instruments over the stereo field. The user patterns are
+   * written on the pattern card, not on this strip.
    */
   private buildExtendedSection(): HTMLElement {
     const section = element('div', 'extended-section');

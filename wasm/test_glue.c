@@ -46,6 +46,25 @@ static int peak(const int16_t *samples, int count)
     return loudest;
 }
 
+/* The loudest sample of one channel of a rendered block. The samples are
+ * interleaved, so the two channels follow each other. */
+static int channel_peak(const int16_t *samples, int count, int channel)
+{
+    int loudest = 0;
+
+    for (int i = 0; i < count / 2; i++) {
+        int value = samples[2 * i + channel];
+
+        if (value < 0) {
+            value = -value;
+        }
+        if (value > loudest) {
+            loudest = value;
+        }
+    }
+    return loudest;
+}
+
 /* Put a user pattern into a slot and select it. The reset comes first, so
  * the pattern starts at the same place in every render. */
 static void prepare_pattern(void *ctx, int slot, const uint16_t *notes)
@@ -341,6 +360,64 @@ int main(void)
     render(ctx, after, 2048);
     check(memcmp(before, after, sizeof(before)) != 0,
           "the next note of a voice takes the parameters that were moved");
+
+    /* The place of a voice in the stereo field. The pan is a place
+     * between the two channels: a voice that is panned hard to one side
+     * is louder in that channel, and a voice in the centre is the same
+     * in both. */
+    static int16_t panned[4096];
+    static int16_t centred[4096];
+
+    poppy_reset(ctx);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65536) == 1,
+          "the pan of a voice can be moved");
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, panned, 4096);
+    check(channel_peak(panned, 4096, 1) > channel_peak(panned, 4096, 0),
+          "a voice panned hard right is louder in the right channel");
+
+    poppy_reset(ctx);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 0) == 1,
+          "the pan of a voice can be moved to the left");
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, panned, 4096);
+    check(channel_peak(panned, 4096, 0) > channel_peak(panned, 4096, 1),
+          "a voice panned hard left is louder in the left channel");
+
+    poppy_reset(ctx);
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, centred, 4096);
+    check(channel_peak(centred, 4096, 0) == channel_peak(centred, 4096, 1),
+          "a voice in the centre of the field is the same in both channels");
+
+    /* A pan outside the range of the parameter is refused. */
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65537) == 0,
+          "a pan above the range is refused");
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, -1) == 0,
+          "a pan below the range is refused");
+
+    /* The pan waits for the next note of the voice, like the parameters
+     * that are not the level: the note that is sounding keeps the place
+     * it started with. */
+    poppy_reset(ctx);
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, before, 2048);
+
+    poppy_reset(ctx);
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65536) == 1,
+          "the pan of a voice can be moved while it rings");
+    render(ctx, after, 2048);
+    check(memcmp(before, after, sizeof(before)) == 0,
+          "a note that is sounding keeps its pan");
+
+    poppy_reset(ctx);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65536) == 1,
+          "the pan of a voice can be moved");
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, after, 2048);
+    check(memcmp(before, after, sizeof(before)) != 0,
+          "the next note of a voice takes the pan that was moved");
 
     poppy_destroy(ctx);
     printf("%s\n",
