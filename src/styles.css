@@ -547,6 +547,16 @@ body {
   --band: clamp(18px, 2.9vw, 34px);
   --digit-width: clamp(16px, 1.7vw, 22px);
   --digit-size: clamp(9px, 0.85vw, 12px);
+  /* The break in the line that a number is printed in: how wide the break
+     is and how deep it bites into the line. */
+  --gap-width: calc(var(--digit-size) * 1.35);
+  --gap-height: calc(var(--digit-size) * 0.45);
+  /* Where the break sits in the band of this fader: at its left end, at
+     its right end, or nowhere. The number column stands on the end of the
+     band, so half of the break is in this fader and half of it in the
+     fader next to it. */
+  --gap-left: 0px;
+  --gap-right: 0px;
 }
 
 /* The band of the master group is interrupted between volume and
@@ -565,7 +575,9 @@ body {
 
 /* The printed comb scale runs on both sides of the slot and continues
    behind it, as on the original panel. The lines are unit divisions of
-   the 0..10 scale, so eleven of them are printed from 0 up to 10. */
+   the 0..10 scale, so eleven of them are printed from 0 up to 10.
+   The line that carries a number breaks around it: the break is a notch
+   cut in the comb, and only the numbered steps have one. */
 .fader-travel::before {
   content: '';
   position: absolute;
@@ -578,6 +590,42 @@ body {
     rgb(35 35 42 / 30%) 0 1px,
     transparent 1px calc((100% - 1px) / 10)
   );
+  /* The notch: the band of the comb is cut at the three numbered steps,
+     and the cut is only as wide as the number column. */
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0 var(--gap-height),
+      #000 var(--gap-height) calc(50% - var(--gap-height)),
+      transparent calc(50% - var(--gap-height)) calc(50% + var(--gap-height)),
+      #000 calc(50% + var(--gap-height)) calc(100% - var(--gap-height)),
+      transparent calc(100% - var(--gap-height)) 100%
+    ),
+    linear-gradient(
+      to right,
+      transparent 0 var(--gap-left),
+      #000 var(--gap-left) calc(100% - var(--gap-right)),
+      transparent calc(100% - var(--gap-right)) 100%
+    );
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0 var(--gap-height),
+      #000 var(--gap-height) calc(50% - var(--gap-height)),
+      transparent calc(50% - var(--gap-height)) calc(50% + var(--gap-height)),
+      #000 calc(50% + var(--gap-height)) calc(100% - var(--gap-height)),
+      transparent calc(100% - var(--gap-height)) 100%
+    ),
+    linear-gradient(
+      to right,
+      transparent 0 var(--gap-left),
+      #000 var(--gap-left) calc(100% - var(--gap-right)),
+      transparent calc(100% - var(--gap-right)) 100%
+    );
+  /* The two masks are united: the comb is cut away only where both of
+     them are out, that is, in the notch of the numbered steps. */
+  -webkit-mask-composite: source-over;
+  mask-composite: add;
   pointer-events: none;
 }
 
@@ -594,34 +642,34 @@ body {
    through it and the number only breaks the line it is printed on. In
    the trio it stands on the right, in the middle of the gap between two
    sliders; in the master group it stands on the left, where the band of
-   the group starts. */
+   the group starts. The break in the line is cut in the two halves that
+   meet at the column: the half that falls in this fader and the half
+   that falls in the fader next to it. The comb itself is printed once,
+   by the slot it belongs to, so the column needs no comb of its own. */
+.fader--right {
+  --gap-right: calc(var(--gap-width) / 2);
+}
+
 .fader--right .fader-digits {
   grid-column: 3;
   justify-self: end;
   transform: translateX(50%);
 }
 
+/* The number column of a fader reaches into the band of the next one, so
+   the next fader breaks its line at the left end as well. */
+.fader-cluster > .fader--right + .fader {
+  --gap-left: calc(var(--gap-width) / 2);
+}
+
+.fader--left {
+  --gap-left: calc(var(--gap-width) / 2);
+}
+
 .fader--left .fader-digits {
   grid-column: 1;
   justify-self: start;
   transform: translateX(-50%);
-}
-
-/* The comb band runs on through the number column, as on the original
-   panel; each number only breaks the line it is printed on. */
-.fader-digits::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgb(35 35 42 / 30%) 0 1px,
-    transparent 1px calc((100% - 1px) / 10)
-  );
-  pointer-events: none;
 }
 
 .fader-tick {
@@ -631,9 +679,6 @@ body {
   font-size: var(--digit-size);
   color: var(--ink-soft);
   opacity: 0.9;
-  /* The stroke knocks the comb line out around the glyph. */
-  -webkit-text-stroke: 2px #e6e8e9;
-  paint-order: stroke fill;
 }
 
 .tick-10 {
