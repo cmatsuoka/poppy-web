@@ -1763,6 +1763,12 @@ body {
   fill: #2f6a8c;
 }
 
+/* A voice in a step the meter leaves out: the step is written, but the
+   machine never plays it. */
+.pattern-grid-hit--skipped {
+  fill: rgb(35 35 42 / 20%);
+}
+
 /* The accent of a step: the engine plays the step louder, and the card
    prints it in the red of the bank B names. */
 .pattern-grid-hit--accent {
@@ -1877,6 +1883,64 @@ body {
 
 .pattern-card-expand[hidden] {
   display: none;
+}
+
+/* The meter of the pattern: the steps outside the bar of the meter are
+   skipped by the machine. It is a small printed control on the card. */
+.pattern-card-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(6px, 1vw, 14px);
+}
+
+.pattern-card-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: clamp(4px, 0.6vw, 8px) 0 0;
+  font-size: clamp(7px, 0.68vw, 9.5px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.pattern-card-meter[hidden] {
+  display: none;
+}
+
+.pattern-card-meter-label {
+  opacity: 0.75;
+}
+
+.pattern-card-meter-select {
+  padding: 0.2em 0.3em;
+  border: 1px solid rgb(35 35 42 / 30%);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.pattern-card-meter-select:hover {
+  border-color: rgb(35 35 42 / 55%);
+}
+
+.pattern-card-meter-select:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* The meter of the pattern is printed like the other flags of the card. */
+.pattern-flag--meter {
+  border-color: rgb(35 35 42 / 40%);
+  color: var(--ink);
+  opacity: 0.9;
 }
 
 /* The bar of the buttons that work on the pattern of the card.

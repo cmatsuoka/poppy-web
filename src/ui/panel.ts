@@ -33,6 +33,7 @@ import {
 } from './bank-file';
 import { loadUserPatterns, saveUserPatterns } from './user-store';
 import { UserNames, defaultUserName } from './user-names';
+import { meterByLabel, meterMask } from './meter';
 
 const Q16 = 65536;
 
@@ -1045,6 +1046,9 @@ export class Panel {
       },
       onToggle: (instrument, column, on) => {
         void this.writeStep(column, 1 << instrument, on);
+      },
+      onMeter: (meter) => {
+        void this.writeMeter(meter);
       },
       onClear: () => this.clearPattern(),
       onCopy: () => this.copyPattern(),
@@ -2122,6 +2126,51 @@ export class Panel {
     this.card.invalidate();
     // The pattern is not in the browser until the save button is pressed.
     this.markUnsaved();
+  }
+
+  /**
+   * Write the meter of the card into the user patterns of the selection.
+   *
+   * The meter says how many of the steps of a bar the machine plays, and
+   * the steps outside the bar are skipped. It belongs to the whole
+   * selection, the way a step of the card does: the mask is written into
+   * every user pattern that is latched.
+   */
+  private async writeMeter(label: string): Promise<void> {
+    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+      return;
+    }
+
+    const meter = meterByLabel(label);
+    if (meter === null) {
+      return;
+    }
+
+    const slots = this.selectionSlots();
+    if (slots.length === 0) {
+      this.showStatus('Select a pattern before you set its meter', true);
+      return;
+    }
+
+    const mask = meterMask(meter);
+    const enableLo = Number(mask & 0xffffffffn) >>> 0;
+    const enableHi = Number((mask >> 32n) & 0xffffffffn) >>> 0;
+
+    for (const slot of slots) {
+      const pattern = await this.userPattern(slot);
+      if (pattern === null) {
+        return;
+      }
+      const next: UserPattern = { ...pattern, enableLo, enableHi };
+      this.userPatterns.set(slot, next);
+      this.engine.setUserPattern(slot, next);
+    }
+
+    // The card shows the pattern that plays, so it has to read it again.
+    this.card.invalidate();
+    // The pattern is not in the browser until the save button is pressed.
+    this.markUnsaved();
+    this.showStatus(`The meter is ${meter.label}`, false);
   }
 
   /**

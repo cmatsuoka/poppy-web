@@ -147,6 +147,33 @@ int main(void)
                                  0) == 0,
           "a slot out of range is refused");
 
+    /* A meter mask: the steps outside the bar of the meter are skipped.
+     * The mask comes back as it was written, and the sequencer never visits
+     * a step the mask leaves out. */
+    check(poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes, 0x0FFF0FFF,
+                                 0x0FFF0FFF, 64, 0) == 1,
+          "a pattern with a meter mask is written into a slot");
+    check(mp7_get_user_pattern(ctx, 6, &read), "the slot with a mask is read");
+    check(read.enable == UINT64_C(0x0FFF0FFF0FFF0FFF),
+          "the meter mask comes back unchanged");
+
+    static int16_t masked[65536];
+    int skipped = 0;
+
+    poppy_reset(ctx);
+    poppy_set_pattern_source(ctx, 1);
+    poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes, 0x0FFF0FFF,
+                            0x0FFF0FFF, 64, 0);
+    poppy_select_rhythm(ctx, 0, 1 << 6);
+    for (int i = 0; i < 64; i++) {
+        poppy_process(ctx, masked + i * 512 * 2, 512);
+        int column = poppy_panel_state(ctx)[6];
+        if ((column % 16) >= 12) {
+            skipped = 1;
+        }
+    }
+    check(skipped == 0, "the sequencer never visits a skipped step");
+
     /* An accented column comes back as it was written, accent flag and all. */
     for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
         notes[column] = (uint16_t)(((column % 8) == 0 ? (1u << 0) : 0) |

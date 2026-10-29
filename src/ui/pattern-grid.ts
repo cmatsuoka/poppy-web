@@ -43,6 +43,13 @@ import {
   type PatternSource,
   type PatternView,
 } from '../audio/protocol';
+import {
+  ALL_STEPS,
+  CUSTOM_METER,
+  DEFAULT_METER,
+  METERS,
+  meterForMask,
+} from './meter';
 import { MAX_NAME_LENGTH, type UserNames } from './user-names';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -51,7 +58,7 @@ const LABEL_WIDTH = 74;
 const ROW_HEIGHT = 14;
 const HIT_RADIUS = 3.1;
 const PLAYHEAD_WIDTH = 2;
-const ENABLE_ALL = (1n << BigInt(PATTERN_COLUMNS)) - 1n;
+const ENABLE_ALL = ALL_STEPS;
 const FALLBACK_SAMPLE_RATE = 48000;
 // The Tambourine, Guiro and Quijada are the three Additional Volume voices.
 const PERCUSSION_INSTRUMENT = 12;
@@ -94,6 +101,11 @@ export interface PatternGridOptions {
    * Called when a voice is put into a step of the grid, or taken out again.
    */
   onToggle?: (instrument: number, column: number, on: boolean) => void;
+  /**
+   * Called when a meter is picked for the pattern of the selection. The
+   * panel writes the mask of the meter into the user patterns it shows.
+   */
+  onMeter?: (meter: string) => void;
   /** The pattern of the selection is emptied. */
   onClear?: ToolAction;
   /** The pattern of the selection is copied to the clipboard. */
@@ -157,6 +169,9 @@ export class PatternGrid {
   private readonly description: HTMLParagraphElement;
   /** The control that opens the card to the voices that are still empty. */
   private readonly expandButton: HTMLButtonElement;
+  /** The control that picks the meter of the pattern. */
+  private readonly meterBox: HTMLLabelElement;
+  private readonly meterSelect: HTMLSelectElement;
   /** The bar of the buttons that work on the pattern. */
   private readonly toolsRow: HTMLDivElement;
   private readonly clearButton: HTMLButtonElement;
@@ -171,6 +186,7 @@ export class PatternGrid {
   private readonly onToggle:
     | ((instrument: number, column: number, on: boolean) => void)
     | null;
+  private readonly onMeter: ((meter: string) => void) | null;
   private readonly onClear: ToolAction | null;
   private readonly onCopy: ToolAction | null;
   private readonly onPaste: ToolAction | null;
@@ -202,6 +218,15 @@ export class PatternGrid {
   private nameNodes: Array<{ rhythm: number; node: HTMLElement }> = [];
   private pendingNode: HTMLSpanElement | null = null;
   private nameSignature = '';
+
+  /**
+   * The option of a mask that belongs to no meter.
+   *
+   * A pattern that was written by hand, or that came from a file, may
+   * carry a mask of its own. The control says so instead of pretending
+   * the pattern is in one of the meters.
+   */
+  private customOption: HTMLOptionElement | null = null;
 
   /**
    * Whether the card prints the voices that are still empty.
@@ -240,6 +265,7 @@ export class PatternGrid {
     this.names = options.names;
     this.onAccent = options.onAccent ?? null;
     this.onToggle = options.onToggle ?? null;
+    this.onMeter = options.onMeter ?? null;
     this.onClear = options.onClear ?? null;
     this.onCopy = options.onCopy ?? null;
     this.onPaste = options.onPaste ?? null;
@@ -315,9 +341,39 @@ export class PatternGrid {
       event.preventDefault();
     });
 
+    // The control that picks the meter of the pattern: the meter says how
+    // many of the steps of a bar the machine plays. It belongs to the
+    // extended mode as well: a factory rhythm is a print, and its meter
+    // is the one of the machine.
+    this.meterBox = document.createElement('label');
+    this.meterBox.className = 'pattern-card-meter';
+    const meterLabel = document.createElement('span');
+    meterLabel.className = 'pattern-card-meter-label';
+    meterLabel.textContent = 'Meter';
+    this.meterSelect = document.createElement('select');
+    this.meterSelect.className = 'pattern-card-meter-select';
+    for (const meter of METERS) {
+      const option = document.createElement('option');
+      option.value = meter.label;
+      option.textContent = meter.label;
+      option.title = meter.title;
+      this.meterSelect.append(option);
+    }
+    this.meterSelect.value = DEFAULT_METER;
+    this.meterSelect.title =
+      'The meter of the pattern: the steps outside the bar are skipped by the machine';
+    this.meterSelect.addEventListener('change', () => {
+      this.onMeter?.(this.meterSelect.value);
+    });
+    this.meterBox.append(meterLabel, this.meterSelect);
+
     const foot = document.createElement('div');
     foot.className = 'pattern-card-foot';
-    foot.append(this.stateRow, this.expandButton);
+    // The controls of the card stand together on the right of the foot.
+    const controls = document.createElement('div');
+    controls.className = 'pattern-card-controls';
+    controls.append(this.meterBox, this.expandButton);
+    foot.append(this.stateRow, controls);
 
     // The bar of the buttons that work on the pattern. It belongs to the
     // extended mode: a factory rhythm is a print, and there is nothing to
@@ -868,19 +924,25 @@ export class PatternGrid {
         return;
       }
       for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
-        // A disabled column is never played, so it holds no hit either.
-        if (!this.isEnabled(pattern, column)) {
+        const plays = this.isEnabled(pattern, column);
+        if (!plays && this.source !== PATTERN_SOURCE_USER) {
+          // A factory rhythm is a print: the card shows what plays, and a
+          // step the machine skips holds no hit.
           continue;
         }
         if (((pattern.notes[column] ?? 0) & bit) === 0) {
           continue;
         }
-        const hit = svgElement(
-          'circle',
-          instrument >= PERCUSSION_INSTRUMENT
-            ? 'pattern-grid-hit pattern-grid-hit--perc'
-            : 'pattern-grid-hit',
-        );
+        const classes = ['pattern-grid-hit'];
+        if (instrument >= PERCUSSION_INSTRUMENT) {
+          classes.push('pattern-grid-hit--perc');
+        }
+        if (!plays) {
+          // A voice in a step the meter leaves out is printed in a
+          // lighter ink: the step is written, but the machine skips it.
+          classes.push('pattern-grid-hit--skipped');
+        }
+        const hit = svgElement('circle', classes.join(' '));
         hit.setAttribute('cx', String(this.columnX(column) + columnWidth / 2));
         hit.setAttribute('cy', String(centre));
         hit.setAttribute('r', String(HIT_RADIUS));
@@ -995,6 +1057,45 @@ export class PatternGrid {
     const extended = this.source === PATTERN_SOURCE_USER;
     this.expandButton.hidden = !extended;
     this.toolsRow.hidden = !extended;
+    this.meterBox.hidden = !extended;
+    if (extended) {
+      this.syncMeter();
+    }
+  }
+
+  /**
+   * The meter of the pattern the card shows.
+   *
+   * The mask of the pattern says which meter it is, because the meters
+   * are the masks the editor writes. A pattern that came from a file may
+   * carry a mask of its own, and then the control says so.
+   */
+  private syncMeter(): void {
+    const mask = this.pattern?.enable ?? ENABLE_ALL;
+    const preferred = this.meterSelect.value;
+    const meter = meterForMask(mask, preferred);
+    this.showCustomOption(meter === null);
+    const value = meter?.label ?? CUSTOM_METER;
+    if (this.meterSelect.value !== value) {
+      this.meterSelect.value = value;
+    }
+  }
+
+  /** The option of a mask that belongs to no meter. */
+  private showCustomOption(show: boolean): void {
+    if (show && this.customOption === null) {
+      const option = document.createElement('option');
+      option.value = CUSTOM_METER;
+      option.textContent = 'Custom';
+      option.title = 'The pattern skips steps of its own';
+      this.customOption = option;
+      this.meterSelect.append(option);
+      return;
+    }
+    if (!show && this.customOption !== null) {
+      this.customOption.remove();
+      this.customOption = null;
+    }
   }
 
   /** The step of the grid a click or a key belongs to. */
@@ -1127,6 +1228,9 @@ export class PatternGrid {
   /** What the cursor points at, for the screen reader. */
   private cursorLabel(pattern: CardPattern): string {
     const step = this.cursorColumn + 1;
+    if (!this.isEnabled(pattern, this.cursorColumn)) {
+      return `Step ${step}: skipped, the meter leaves it out`;
+    }
     if (this.cursorRowOf(pattern) >= pattern.rows.length) {
       const accented = pattern.accents[this.cursorColumn] === true;
       return `Accent on step ${step}: ${accented ? 'on' : 'off'}`;
@@ -1235,10 +1339,31 @@ export class PatternGrid {
         }
       }
     }
+
+    // The Guiro of a step the meter leaves out is printed in a lighter
+    // ink: the step is written, but the machine skips it.
+    if (this.source !== PATTERN_SOURCE_USER) {
+      return;
+    }
+    const bit = 1 << GUIRO_INSTRUMENT;
+    for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
+      if (this.isEnabled(pattern, column)) {
+        continue;
+      }
+      if (((pattern.notes[column] ?? 0) & bit) === 0) {
+        continue;
+      }
+      this.drawGuiroHit(column, centre, true);
+    }
   }
 
-  private drawGuiroHit(column: number, centre: number): void {
-    const hit = svgElement('circle', 'pattern-grid-hit pattern-grid-hit--perc');
+  private drawGuiroHit(column: number, centre: number, skipped = false): void {
+    const hit = svgElement(
+      'circle',
+      skipped
+        ? 'pattern-grid-hit pattern-grid-hit--skipped'
+        : 'pattern-grid-hit pattern-grid-hit--perc',
+    );
     hit.setAttribute('cx', String(this.columnCentre(column)));
     hit.setAttribute('cy', String(centre));
     hit.setAttribute('r', String(HIT_RADIUS));
@@ -1333,6 +1458,17 @@ export class PatternGrid {
       user.className = 'pattern-flag pattern-flag--user';
       user.textContent = 'USER';
       this.metaRow.append(user);
+
+      // The meter of the pattern: the mask of the pattern says which
+      // meter it is.
+      const meter = meterForMask(this.pattern.enable, this.meterSelect.value);
+      if (meter !== null) {
+        const flag = document.createElement('span');
+        flag.className = 'pattern-flag pattern-flag--meter';
+        flag.textContent = meter.label;
+        flag.title = meter.title;
+        this.metaRow.append(flag);
+      }
     }
 
     if (this.pattern.triplet) {
