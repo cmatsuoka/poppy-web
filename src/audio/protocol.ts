@@ -27,6 +27,13 @@ export const INSTRUMENT_NAMES = [
   'Quijada',
 ] as const;
 
+/**
+ * The names of the factory rhythms.
+ *
+ * They are written here as they are read. The machine prints its names in
+ * capitals, and the print does it with the type of the panel: the key bed
+ * and the card set their names in capitals.
+ */
 export const RHYTHM_NAMES = [
   'Waltz',
   'Samba',

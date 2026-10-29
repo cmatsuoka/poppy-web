@@ -1970,20 +1970,6 @@ body {
   border-color: rgb(35 35 42 / 60%);
 }
 
-/* The square button that puts the knobs back. */
-.pattern-card-tool--reset {
-  min-width: 0;
-  width: 2em;
-  height: 2em;
-  padding: 0;
-}
-
-.pattern-card-tool-icon {
-  width: 1.1em;
-  height: 1.1em;
-  fill: currentcolor;
-}
-
 /* For the things a screen reader has to read out but nobody has to see. */
 .visually-hidden {
   position: absolute;

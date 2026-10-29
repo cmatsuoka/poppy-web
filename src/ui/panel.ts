@@ -23,8 +23,16 @@ import {
   type ControlPositions,
 } from './control-store';
 import { PatternGrid, rhythmsFor } from './pattern-grid';
+import {
+  buildBankFile,
+  chooseBankFile,
+  downloadBankFile,
+  patternFromFile,
+  patternToFile,
+  type BankFile,
+} from './bank-file';
 import { loadUserPatterns, saveUserPatterns } from './user-store';
-import { UserNames } from './user-names';
+import { UserNames, defaultUserName } from './user-names';
 
 const Q16 = 65536;
 
@@ -1040,8 +1048,9 @@ export class Panel {
       onClear: () => this.clearPattern(),
       onCopy: () => this.copyPattern(),
       onPaste: () => this.pastePattern(),
+      onExport: () => this.exportBank(),
+      onImport: () => this.importBank(),
       onSave: () => this.savePatterns(),
-      onReset: () => this.resetKnobs(),
     });
 
     host.append(this.root);
@@ -1336,10 +1345,10 @@ export class Panel {
   /**
    * Put the knobs of the selected memory position back where they belong.
    *
-   * The square button at the end of the band and the one in the bar of the
-   * pattern editor both do it: it is the only way back to the positions
-   * the machine comes up in. Only the position that is selected is put
-   * back; the other ones keep the settings they were given.
+   * The square button at the end of the band does it: it is the only way
+   * back to the positions the machine comes up in. Only the position that
+   * is selected is put back; the other ones keep the settings they were
+   * given.
    */
   private resetKnobs(): boolean {
     const values = this.bandValues;
@@ -1500,8 +1509,8 @@ export class Panel {
     const modeMarks = element('div', 'mode-marks');
     modeMarks.setAttribute('aria-hidden', 'true');
     modeMarks.append(
-      element('span', 'mode-mark mode-mark-preset', 'PRESET'),
-      element('span', 'mode-mark mode-mark-user', 'EXTENDED'),
+      element('span', 'mode-mark mode-mark-preset', 'CLASSIC'),
+      element('span', 'mode-mark mode-mark-user', 'ADVANCED'),
     );
     this.modeSwitch.append(modeMarks);
     lampBlock.append(this.modeSwitch);
@@ -1676,8 +1685,8 @@ export class Panel {
     this.engine.setSource(source);
     this.showStatus(
       source === PATTERN_SOURCE_USER
-        ? 'Extended mode: the user patterns are played'
-        : 'Preset mode: the factory rhythms are played',
+        ? 'Advanced mode: the user patterns are played'
+        : 'Classic mode: the factory rhythms are played',
       false,
     );
   }
@@ -2250,6 +2259,97 @@ export class Panel {
     this.card.invalidate();
     this.markUnsaved();
     this.showStatus('The pattern is cleared', false);
+    return true;
+  }
+
+  /**
+   * The ten user patterns of a bank.
+   *
+   * A bank is one bank of the key bed: the ten slots that stand behind its
+   * ten rhythm keys.
+   */
+  private bankSlots(bank: Bank): number[] {
+    return rhythmsFor(bank, (1 << RHYTHM_BUTTON_COUNT) - 1);
+  }
+
+  /**
+   * Write the whole bank of the selection to a file.
+   *
+   * The file holds the ten rhythms of the bank the lever stands on, with
+   * their names, so the bank can be put back on another machine as it was.
+   */
+  private async exportBank(): Promise<boolean> {
+    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+      return false;
+    }
+
+    const bank = this.displayedBank();
+    const patterns = [];
+    for (const slot of this.bankSlots(bank)) {
+      const pattern = await this.userPattern(slot);
+      if (pattern === null) {
+        return false;
+      }
+      patterns.push(patternToFile(pattern, this.userNames.name(slot)));
+    }
+
+    downloadBankFile(buildBankFile(bank, patterns));
+    this.showStatus(`Bank ${bank === 1 ? 'B' : 'A'} is written to a file`, false);
+    return true;
+  }
+
+  /**
+   * Read a whole bank of rhythms from a file into the bank of the
+   * selection.
+   *
+   * The ten rhythms of the file go into the ten slots of the bank the
+   * lever stands on, with their names. The bank that was there is thrown
+   * away by it, and the work is not in the browser until the save button
+   * is pressed.
+   */
+  private async importBank(): Promise<boolean> {
+    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+      return false;
+    }
+
+    let file: BankFile | null = null;
+    try {
+      file = await chooseBankFile();
+    } catch (error: unknown) {
+      this.showStatus(
+        error instanceof Error ? error.message : String(error),
+        true,
+      );
+      return false;
+    }
+    if (file === null) {
+      // The dialog was let go without a file.
+      return false;
+    }
+
+    const bank = this.displayedBank();
+    const rhythms = file.patterns;
+    const names = new Map<number, string>();
+    this.bankSlots(bank).forEach((slot, index) => {
+      const pattern = rhythms[index];
+      if (pattern === undefined) {
+        return;
+      }
+      const next = patternFromFile(pattern);
+      this.userPatterns.set(slot, next);
+      this.engine.setUserPattern(slot, next);
+      names.set(
+        slot,
+        pattern.name.trim() === '' ? defaultUserName(slot) : pattern.name,
+      );
+    });
+
+    this.userNames.setMany(names);
+    // The card shows the patterns that play, so it has to read them again.
+    this.card.invalidate();
+    // The bank is not in the browser until the save button is pressed.
+    this.markUnsaved();
+    this.showStatus(`Bank ${bank === 1 ? 'B' : 'A'} is imported`, false);
     return true;
   }
 

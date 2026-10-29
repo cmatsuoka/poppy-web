@@ -100,10 +100,12 @@ export interface PatternGridOptions {
   onCopy?: ToolAction;
   /** The pattern of the clipboard is written into the selection. */
   onPaste?: ToolAction;
+  /** The whole bank of the selection is written to a file. */
+  onExport?: ToolAction;
+  /** A whole bank of rhythms is read from a file into the selection. */
+  onImport?: ToolAction;
   /** The user patterns are kept in the browser. */
   onSave?: ToolAction;
-  /** The knobs of the band are put back where they belong. */
-  onReset?: ToolAction;
 }
 
 function svgElement<K extends keyof SVGElementTagNameMap>(
@@ -160,8 +162,9 @@ export class PatternGrid {
   private readonly clearButton: HTMLButtonElement;
   private readonly copyButton: HTMLButtonElement;
   private readonly pasteButton: HTMLButtonElement;
+  private readonly importButton: HTMLButtonElement;
+  private readonly exportButton: HTMLButtonElement;
   private readonly saveButton: HTMLButtonElement;
-  private readonly resetButton: HTMLButtonElement;
 
   private readonly names: UserNames;
   private readonly onAccent: ((column: number, accent: boolean) => void) | null;
@@ -171,8 +174,9 @@ export class PatternGrid {
   private readonly onClear: ToolAction | null;
   private readonly onCopy: ToolAction | null;
   private readonly onPaste: ToolAction | null;
+  private readonly onExport: ToolAction | null;
+  private readonly onImport: ToolAction | null;
   private readonly onSave: ToolAction | null;
-  private readonly onReset: ToolAction | null;
   private readonly stopWatchingNames: () => void;
 
   private readonly views = new Map<number, PatternView>();
@@ -239,8 +243,9 @@ export class PatternGrid {
     this.onClear = options.onClear ?? null;
     this.onCopy = options.onCopy ?? null;
     this.onPaste = options.onPaste ?? null;
+    this.onExport = options.onExport ?? null;
+    this.onImport = options.onImport ?? null;
     this.onSave = options.onSave ?? null;
-    this.onReset = options.onReset ?? null;
 
     this.element = document.createElement('div');
     this.element.className = 'pattern-card';
@@ -349,7 +354,27 @@ export class PatternGrid {
         void this.runTool(this.onPaste);
       },
     );
-    group.append(this.clearButton, this.copyButton, this.pasteButton);
+    this.importButton = this.buildTool(
+      'Import bank',
+      'Read a whole bank of rhythms from a file into the bank of the selection',
+      () => {
+        void this.runTool(this.onImport, this.importButton, 'Imported');
+      },
+    );
+    this.exportButton = this.buildTool(
+      'Export bank',
+      'Write the whole bank of the selection to a file',
+      () => {
+        void this.runTool(this.onExport, this.exportButton, 'Exported');
+      },
+    );
+    group.append(
+      this.clearButton,
+      this.copyButton,
+      this.pasteButton,
+      this.importButton,
+      this.exportButton,
+    );
 
     const rule = document.createElement('span');
     rule.className = 'pattern-card-rule';
@@ -363,17 +388,8 @@ export class PatternGrid {
       },
       'pattern-card-tool--save',
     );
-    this.resetButton = this.buildTool(
-      '',
-      'Put the knobs of the selected memory position back',
-      () => {
-        void this.runTool(this.onReset);
-      },
-      'pattern-card-tool--reset',
-    );
-    this.resetButton.append(this.buildResetIcon());
 
-    this.toolsRow.append(group, rule, this.saveButton, this.resetButton);
+    this.toolsRow.append(group, rule, this.saveButton);
 
     // There is nothing to paste before something has been copied.
     this.setClipboard(false);
@@ -497,21 +513,6 @@ export class PatternGrid {
     return button;
   }
 
-  /** The little arrow on the reset button. */
-  private buildResetIcon(): SVGElement {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('class', 'pattern-card-tool-icon');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute(
-      'd',
-      'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z',
-    );
-    svg.append(path);
-    return svg;
-  }
-
   /**
    * Carry out an action of the bar and tell the user that it worked.
    *
@@ -534,11 +535,15 @@ export class PatternGrid {
 
   /** Say that an action has been carried out. */
   private flash(button: HTMLButtonElement, text: string): void {
-    const label = button.textContent;
+    // The label of the button is kept, so that a second flash does not
+    // take the text of the first one for the real label.
+    if (!button.classList.contains('is-done')) {
+      button.dataset.label = button.textContent ?? '';
+    }
     button.textContent = text;
     button.classList.add('is-done');
     window.setTimeout(() => {
-      button.textContent = label;
+      button.textContent = button.dataset.label ?? '';
       button.classList.remove('is-done');
     }, 1600);
   }
@@ -729,6 +734,18 @@ export class PatternGrid {
     node.maxLength = MAX_NAME_LENGTH;
     node.value = this.nameFor(rhythm);
     node.setAttribute('aria-label', 'Name of the user pattern');
+    // The machine prints its names in capitals, so the letters are capitals
+    // while they are typed. The caret keeps its place.
+    node.addEventListener('input', () => {
+      const upper = node.value.toUpperCase();
+      if (upper === node.value) {
+        return;
+      }
+      const start = node.selectionStart ?? node.value.length;
+      const end = node.selectionEnd ?? start;
+      node.value = upper;
+      node.setSelectionRange(start, end);
+    });
     node.addEventListener('change', () => {
       this.names.set(rhythm, node.value);
       node.value = this.nameFor(rhythm);

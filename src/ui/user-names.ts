@@ -60,6 +60,30 @@ export class UserNames {
     this.notify();
   }
 
+  /**
+   * Give a whole set of user patterns their names at once.
+   *
+   * A bank that is read from a file carries the names of its ten rhythms,
+   * and they are all written at once: the browser is written once and the
+   * panel is told once.
+   */
+  setMany(names: Map<number, string>): void {
+    let changed = false;
+    for (const [slot, name] of names) {
+      const next = normalizeUserName(name);
+      if (next === '' || next === this.name(slot)) {
+        continue;
+      }
+      this.names.set(slot, next);
+      changed = true;
+    }
+    if (!changed) {
+      return;
+    }
+    this.save();
+    this.notify();
+  }
+
   /** Watch the names. It is called after every change. */
   onChange(listener: () => void): () => void {
     this.listeners.add(listener);
