@@ -193,7 +193,8 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       valueText: (value) => `${Math.round(value * 100)}%`,
       onInput: (value) => {
         // The knob moves the whole group of percussion at once: the small
-        // bongo, the large bongo, the conga, the claves and the rimshot.
+        // bongo, the large bongo, the conga, the cowbell, the claves and
+        // the rimshot.
         const level = Math.round(value * Q16);
         for (const instrument of INSTR_PERCUSSION) {
           engine.setVoiceParam(instrument, VOICE_PARAM.volume, level);

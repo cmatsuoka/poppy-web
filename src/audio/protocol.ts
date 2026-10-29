@@ -75,17 +75,20 @@ export const INSTR_HIHAT = 8;
 export const INSTR_SMALL_BONGO = 3;
 export const INSTR_LARGE_BONGO = 4;
 export const INSTR_CONGA = 5;
+export const INSTR_COWBELL = 6;
 export const INSTR_CLAVES = 7;
 export const INSTR_RIMSHOT = 9;
 
 /**
  * The percussion voices the PERC VOL knob of the band reaches for: the
- * small bongo, the large bongo, the conga, the claves and the rimshot.
+ * small bongo, the large bongo, the conga, the cowbell, the claves and the
+ * rimshot.
  */
 export const INSTR_PERCUSSION = [
   INSTR_SMALL_BONGO,
   INSTR_LARGE_BONGO,
   INSTR_CONGA,
+  INSTR_COWBELL,
   INSTR_CLAVES,
   INSTR_RIMSHOT,
 ] as const;
