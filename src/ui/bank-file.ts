@@ -8,9 +8,10 @@
  * The format is JSON: it is easy to read, easy to write and easy to check.
  * A rhythm is written the way the engine holds it: the 64 steps of the
  * cycle, each of them a bit for every voice of the machine and a bit for
- * the accent, and the steps the engine skips. The file says what it is
- * and which version of the format it uses, so a file of another program or
- * of another version is refused instead of being half read.
+ * the accent, and the steps the engine plays, which are a 64-bit value.
+ * The file says what it is and which version of the format it uses, so a
+ * file of another program or of another version is refused instead of being
+ * half read.
  */
 
 import { PATTERN_COLUMNS, type Bank, type UserPattern } from '../audio/protocol';
@@ -19,10 +20,13 @@ import { PATTERN_COLUMNS, type Bank, type UserPattern } from '../audio/protocol'
 export const BANK_FILE_FORMAT = 'poppy-web.bank';
 
 /** The version of the format this build reads and writes. */
-export const BANK_FILE_VERSION = 3;
+export const BANK_FILE_VERSION = 4;
 
 /** The number of rhythms a bank holds. */
 export const BANK_PATTERN_COUNT = 10;
+
+/** Every step of the cycle is played. */
+const ALL_STEPS = (1n << BigInt(PATTERN_COLUMNS)) - 1n;
 
 /** One rhythm of a bank, as it is written in the file. */
 export interface BankFilePattern {
@@ -36,8 +40,15 @@ export interface BankFilePattern {
    * bit, the quijada the fifteenth, and the accent the sixteenth.
    */
   steps: number[];
-  /** The steps the engine skips: they take no time. */
-  skipped: number[];
+  /**
+   * The steps the engine plays, as a 64-bit value.
+   *
+   * A bit is set for every step the engine plays and clear for every step
+   * it skips. The first step of the cycle is the lowest bit and the last
+   * one the highest, the way the engine numbers the columns, so the value
+   * reads like the cycle itself.
+   */
+  enable: string;
   /** The length of the repeating part of the cycle. */
   period: number;
   /** Whether the rhythm is played as a triplet. */
@@ -71,26 +82,55 @@ export function buildBankFile(
   };
 }
 
+/**
+ * The steps the engine plays, as a 64-bit value.
+ *
+ * The engine holds the mask in two words: the low one carries the first
+ * thirty-two columns of the cycle and the high one the other thirty-two.
+ */
+function enableValue(pattern: UserPattern): bigint {
+  const lo = BigInt(pattern.enableLo >>> 0);
+  const hi = BigInt(pattern.enableHi >>> 0);
+  return (hi << 32n) | lo;
+}
+
+/**
+ * The printed form of a 64-bit value.
+ *
+ * The value is written the way it is written in C: a "0x" and the digits of
+ * the number, padded to the sixteen digits of the cycle.
+ */
+function formatEnable(value: bigint): string {
+  return `0x${value.toString(16).padStart(16, '0')}`;
+}
+
+/**
+ * Read a 64-bit value out of its printed form.
+ *
+ * The "0x" is optional and the digits may be written in either case. A
+ * text that is not a 64-bit number is nothing.
+ */
+function parseEnable(text: string): bigint | null {
+  const trimmed = text.trim();
+  const digits =
+    trimmed.startsWith('0x') || trimmed.startsWith('0X')
+      ? trimmed.slice(2)
+      : trimmed;
+  if (!/^[0-9a-fA-F]{1,16}$/.test(digits)) {
+    return null;
+  }
+  return BigInt(`0x${digits}`);
+}
+
 /** Write a pattern of the engine as the steps of a file. */
 export function patternToFile(
   pattern: UserPattern,
   name: string,
 ): BankFilePattern {
-  const skipped: number[] = [];
-  for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
-    const enabled =
-      column < 32
-        ? ((pattern.enableLo >>> 0) & (1 << column)) !== 0
-        : ((pattern.enableHi >>> 0) & (1 << (column - 32))) !== 0;
-    if (!enabled) {
-      skipped.push(column + 1);
-    }
-  }
-
   return {
     name,
     steps: pattern.notes.map((note) => (note ?? 0) & 0xffff),
-    skipped,
+    enable: formatEnable(enableValue(pattern)),
     period: pattern.period,
     triplet: pattern.triplet,
   };
@@ -98,20 +138,14 @@ export function patternToFile(
 
 /** Read a rhythm of a file back as a pattern of the engine. */
 export function patternFromFile(pattern: BankFilePattern): UserPattern {
-  let enableLo = 0xffffffff;
-  let enableHi = 0xffffffff;
-  for (const step of pattern.skipped) {
-    if (step <= 32) {
-      enableLo &= ~(1 << (step - 1));
-    } else {
-      enableHi &= ~(1 << (step - 33));
-    }
-  }
+  // The file has been checked before it gets here, so the value is a
+  // 64-bit number.
+  const enable = parseEnable(pattern.enable) ?? ALL_STEPS;
 
   return {
     notes: pattern.steps.map((step) => step & 0xffff),
-    enableLo: enableLo >>> 0,
-    enableHi: enableHi >>> 0,
+    enableLo: Number(enable & 0xffffffffn) >>> 0,
+    enableHi: Number((enable >> 32n) & 0xffffffffn) >>> 0,
     period: pattern.period,
     triplet: pattern.triplet,
   };
@@ -127,15 +161,6 @@ function isPeriod(value: unknown): value is number {
   // The cycle repeats the pattern every `period` columns, so the period
   // has to divide the cycle in whole steps.
   return (value & (value - 1)) === 0;
-}
-
-function isStepNumber(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= 1 &&
-    value <= PATTERN_COLUMNS
-  );
 }
 
 /**
@@ -170,10 +195,10 @@ function isBankFilePattern(value: unknown): value is BankFilePattern {
   if (!pattern.steps.every(isStep)) {
     return false;
   }
-  if (!Array.isArray(pattern.skipped)) {
+  if (typeof pattern.enable !== 'string') {
     return false;
   }
-  if (!pattern.skipped.every(isStepNumber)) {
+  if (parseEnable(pattern.enable) === null) {
     return false;
   }
   if (!isPeriod(pattern.period)) {
@@ -232,7 +257,7 @@ export function parseBankFile(text: string): BankFile {
     patterns: file.patterns.map((pattern) => ({
       name: pattern.name,
       steps: [...pattern.steps],
-      skipped: [...new Set(pattern.skipped)].sort((a, b) => a - b),
+      enable: formatEnable(parseEnable(pattern.enable) ?? ALL_STEPS),
       period: pattern.period,
       triplet: pattern.triplet,
     })),

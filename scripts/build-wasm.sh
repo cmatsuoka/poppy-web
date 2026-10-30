@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPPY_REPO="${LIBPOPPY_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
-LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-c98309493ce2345a693f0892fbdbb204c95f25fd}"
+LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-a901b18492f38ad1ffe9158d2d11b6e2fb9fbab0}"
 LIBPOPPY_DIR="${LIBPOPPY_DIR:-$ROOT/vendor/libpoppy}"
 EMCC="${EMCC:-emcc}"
 OUT_DIR="$ROOT/build"

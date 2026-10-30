@@ -1070,6 +1070,12 @@ export class Panel {
       onMeter: (meter) => {
         void this.writeMeter(meter);
       },
+      onRename: () => {
+        // The name of a pattern belongs to the pattern, so it is kept with
+        // it: the work is not in the browser until the save button is
+        // pressed.
+        this.markUnsaved();
+      },
       onClear: () => this.clearPattern(),
       onCopy: () => this.copyPattern(),
       onPaste: () => this.pastePattern(),
@@ -2427,13 +2433,14 @@ export class Panel {
    *
    * The patterns are written when the save button is pressed and not
    * before: a pattern that is being written is not lost, but it is also
-   * not in the browser yet.
+   * not in the browser yet. The names of the patterns are kept with them.
    */
   private savePatterns(): boolean {
     if (this.displayedSource() !== PATTERN_SOURCE_USER) {
       return false;
     }
     saveUserPatterns(this.userPatterns);
+    this.userNames.save();
     this.patternsUnsaved = false;
     this.card.setUnsaved(false);
     this.showStatus('The patterns are kept in the browser', false);
@@ -2452,7 +2459,8 @@ export class Panel {
    *
    * The extended mode is left behind, and the work that was not kept with
    * the save button is gone: a slot that was never saved goes back to the
-   * empty pattern the engine starts with.
+   * empty pattern the engine starts with. The names of the patterns go
+   * back with them: a name belongs to the pattern it names.
    */
   private discardUnsavedPatterns(): void {
     if (!this.patternsUnsaved) {
@@ -2466,6 +2474,9 @@ export class Panel {
       this.userPatterns.set(slot, restored);
       this.engine.setUserPattern(slot, restored);
     }
+
+    // The names go back to the names the browser holds.
+    this.userNames.restore();
 
     // The card shows the patterns that play, so it has to read them again.
     this.card.setUnsaved(false);

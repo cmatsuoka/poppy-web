@@ -8,8 +8,10 @@
  * A name is printed in one column of the key bed, so it is kept short: ten
  * characters, the length of "BOSSA NOVA", the longest factory name.
  *
- * The names are kept in the browser, like the patterns themselves, so the
- * user finds them again after a reload.
+ * A name belongs to the pattern it names, so it is kept in the browser the
+ * way the pattern is: when the save button is pressed, and not before. The
+ * work that was not saved is thrown away as a whole, and the name of a
+ * pattern goes back to the name the browser holds with it.
  */
 
 const STORAGE_KEY = 'poppy-web.user-names.v1';
@@ -49,25 +51,29 @@ export class UserNames {
     return this.names.get(slot) ?? defaultUserName(slot);
   }
 
-  /** Give a user pattern another name. */
-  set(slot: number, name: string): void {
+  /**
+   * Give a user pattern another name.
+   *
+   * It tells whether the name changed: a name that is the same as the one
+   * the pattern already carries is not a change.
+   */
+  set(slot: number, name: string): boolean {
     const next = normalizeUserName(name);
     if (next === '' || next === this.name(slot)) {
-      return;
+      return false;
     }
     this.names.set(slot, next);
-    this.save();
     this.notify();
+    return true;
   }
 
   /**
    * Give a whole set of user patterns their names at once.
    *
    * A bank that is read from a file carries the names of its ten rhythms,
-   * and they are all written at once: the browser is written once and the
-   * panel is told once.
+   * and they are all written at once: the panel is told once.
    */
-  setMany(names: Map<number, string>): void {
+  setMany(names: Map<number, string>): boolean {
     let changed = false;
     for (const [slot, name] of names) {
       const next = normalizeUserName(name);
@@ -78,9 +84,42 @@ export class UserNames {
       changed = true;
     }
     if (!changed) {
-      return;
+      return false;
     }
-    this.save();
+    this.notify();
+    return true;
+  }
+
+  /**
+   * Keep the names in the browser.
+   *
+   * The names are written with the patterns they belong to, when the save
+   * button is pressed.
+   */
+  save(): void {
+    const stored: Record<string, string> = {};
+    for (const [slot, name] of this.names) {
+      stored[String(slot)] = name;
+    }
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    } catch {
+      // A browser that does not let the page store anything simply does not
+      // keep the names.
+    }
+  }
+
+  /**
+   * Put the names the browser holds back.
+   *
+   * A name that was written but not saved is gone, the way the pattern it
+   * names is gone: a slot that was never saved goes back to the default
+   * name.
+   */
+  restore(): void {
+    this.names.clear();
+    this.load();
     this.notify();
   }
 
@@ -128,20 +167,6 @@ export class UserNames {
       if (name !== '') {
         this.names.set(slot, name);
       }
-    }
-  }
-
-  private save(): void {
-    const stored: Record<string, string> = {};
-    for (const [slot, name] of this.names) {
-      stored[String(slot)] = name;
-    }
-
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-    } catch {
-      // A browser that does not let the page store anything simply does not
-      // keep the names.
     }
   }
 }

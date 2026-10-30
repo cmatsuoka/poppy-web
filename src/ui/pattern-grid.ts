@@ -106,6 +106,12 @@ export interface PatternGridOptions {
    * panel writes the mask of the meter into the user patterns it shows.
    */
   onMeter?: (meter: string) => void;
+  /**
+   * Called when the name of a user pattern is written on the card. The
+   * panel marks the work as not saved: a name belongs to the pattern it
+   * names, so it is kept with it.
+   */
+  onRename?: (rhythm: number) => void;
   /** The pattern of the selection is emptied. */
   onClear?: ToolAction;
   /** The pattern of the selection is copied to the clipboard. */
@@ -187,6 +193,7 @@ export class PatternGrid {
     | ((instrument: number, column: number, on: boolean) => void)
     | null;
   private readonly onMeter: ((meter: string) => void) | null;
+  private readonly onRename: ((rhythm: number) => void) | null;
   private readonly onClear: ToolAction | null;
   private readonly onCopy: ToolAction | null;
   private readonly onPaste: ToolAction | null;
@@ -266,6 +273,7 @@ export class PatternGrid {
     this.onAccent = options.onAccent ?? null;
     this.onToggle = options.onToggle ?? null;
     this.onMeter = options.onMeter ?? null;
+    this.onRename = options.onRename ?? null;
     this.onClear = options.onClear ?? null;
     this.onCopy = options.onCopy ?? null;
     this.onPaste = options.onPaste ?? null;
@@ -803,7 +811,11 @@ export class PatternGrid {
       node.setSelectionRange(start, end);
     });
     node.addEventListener('change', () => {
-      this.names.set(rhythm, node.value);
+      if (this.names.set(rhythm, node.value)) {
+        // The name belongs to the pattern, so the work is not safe until
+        // the save button is pressed.
+        this.onRename?.(rhythm);
+      }
       node.value = this.nameFor(rhythm);
     });
     node.addEventListener('keydown', (event) => {

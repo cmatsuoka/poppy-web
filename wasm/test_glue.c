@@ -361,6 +361,26 @@ int main(void)
     check(memcmp(before, after, sizeof(before)) != 0,
           "the next note of a voice takes the parameters that were moved");
 
+    /* The parameters of a voice survive a sample-rate change: the engine
+     * builds the voices again, and the settings the panel gave them are
+     * put back with them. */
+    static int16_t factory_cutoff[20480];
+    static int16_t moved_cutoff[20480];
+
+    prepare_pattern(ctx, 9, snare_notes);
+    mp7_set_sample_rate(ctx, 22050);
+    render(ctx, factory_cutoff, 20480);
+
+    prepare_pattern(ctx, 9, snare_notes);
+    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 900) == 1,
+          "the cutoff of a voice can be moved");
+    mp7_set_sample_rate(ctx, 22050);
+    render(ctx, moved_cutoff, 20480);
+
+    check(memcmp(moved_cutoff, factory_cutoff, sizeof(moved_cutoff)) != 0,
+          "the parameters of a voice survive a sample-rate change");
+    mp7_set_sample_rate(ctx, 44100);
+
     /* The place of a voice in the stereo field. The pan is a place
      * between the two channels: a voice that is panned hard to one side
      * is louder in that channel, and a voice in the centre is the same
