@@ -42,16 +42,21 @@ static int32_t panel_out[9];
  *
  * The same layout for a factory pattern and for a user pattern. A user
  * pattern has no shared percussion layer, so its percussion pointer stays
- * empty. */
+ * empty.
+ *
+ * The periods are the length of the grid the pointer points at. The view of
+ * a factory rhythm carries the whole cycle, so its period is the length of
+ * the cycle, and the period of a user pattern is the one the pattern was
+ * written with. */
 static int32_t pattern_out[9];
+
+/* The view of a factory rhythm. The grid of a view is the whole cycle, so
+ * it is copied into this buffer and the JS side reads it from here. */
+static struct mp7_pattern_view factory_out;
 
 /* The user pattern the engine copied out of a slot. The notes live in this
  * buffer, so the JS side reads them from a fixed address. */
 static struct mp7_user_pattern user_out;
-
-/* The rhythm a user slot comes up with. The notes live in this buffer, so
- * the JS side reads them from a fixed address. */
-static struct mp7_user_pattern default_out;
 
 /* The mask of the compound grid: the mask of the 2/4 and of the 6/8. A
  * pattern that carries it plays on the compound grid. */
@@ -147,21 +152,36 @@ WASM_EXPORT void poppy_set_instr_gain(void *ctx, int32_t instrument, int32_t q16
     mp7_set_instr_gain(ctx, (mp7_instr)instrument, q16);
 }
 
-/* Move one parameter of one voice: the level, the attack, the decay, the
- * centre of the band-pass, the corner of the high-pass or the resonance of
- * the band-pass. Returns 1 when the engine took the value and 0 when it
- * refused it. */
-WASM_EXPORT int32_t poppy_set_voice_param(void *ctx,
-                                           int32_t instrument,
-                                           int32_t param,
-                                           int32_t value)
+/* The place of an instrument in the stereo field, Q16.
+ *
+ * The engine's pan law is linear: 0 is hard left, 65536 is hard right and
+ * 32768 - the default of every instrument - is the centre of the field. */
+WASM_EXPORT void poppy_set_instr_pan(void *ctx, int32_t instrument, int32_t pan)
 {
-    return mp7_set_voice_param(ctx,
-                                (mp7_instr)instrument,
-                                (mp7_voice_param)param,
-                                value)
-               ? 1
-               : 0;
+    mp7_set_instr_pan(ctx, (mp7_instr)instrument, pan);
+}
+
+/* The decay of the snare 1, as a multiplier of the factory decay, Q16.
+ *
+ * 65536 is the factory decay and the engine clamps the multiplier to a
+ * quarter and to four times the factory decay. */
+WASM_EXPORT void poppy_set_snare1_decay(void *ctx, int32_t decay_q16)
+{
+    mp7_set_snare1_decay(ctx, decay_q16);
+}
+
+/* The centre of the band-pass of the snare 1, in Hz. The engine clamps it
+ * to the range of the parameter and to two fifths of the sample rate. */
+WASM_EXPORT void poppy_set_snare1_cutoff(void *ctx, int32_t cutoff_hz)
+{
+    mp7_set_snare1_cutoff(ctx, (uint32_t)cutoff_hz);
+}
+
+/* The corner of the high-pass of the hi-hat, in Hz. The engine clamps it
+ * to the range of the parameter and to two fifths of the sample rate. */
+WASM_EXPORT void poppy_set_hihat_cutoff(void *ctx, int32_t cutoff_hz)
+{
+    mp7_set_hihat_cutoff(ctx, (uint32_t)cutoff_hz);
 }
 
 /* The gain an accented column is played at, Q16. */
@@ -189,24 +209,31 @@ WASM_EXPORT int32_t *poppy_panel_state(const void *ctx)
     return panel_out;
 }
 
+/*
+ * The view of a factory rhythm.
+ *
+ * The engine hands over the whole 64-column cycle: the period a rhythm is
+ * stored in is repeated out to the cycle before it reaches the panel. A
+ * rhythm that does not exist comes back as an empty view - a grid of
+ * nothing and a mask of nothing - and is refused here.
+ */
 WASM_EXPORT int32_t *poppy_factory_pattern(int32_t rhythm)
 {
-    struct mp7_pattern_view v;
+    mp7_get_factory_pattern((mp7_rhythm)rhythm, &factory_out);
 
-    mp7_get_factory_pattern((mp7_rhythm)rhythm, &v);
-    if (v.notes == NULL || v.percussion == NULL) {
+    if (factory_out.enable == 0) {
         pattern_out[8] = 0;
         return pattern_out;
     }
 
-    pattern_out[0] = (int32_t)(uintptr_t)v.notes;
-    pattern_out[1] = (int32_t)(uintptr_t)v.percussion;
-    pattern_out[2] = (int32_t)(uint32_t)v.enable;
-    pattern_out[3] = (int32_t)(uint32_t)(v.enable >> 32);
-    pattern_out[4] = (int32_t)v.notes_period;
-    pattern_out[5] = (int32_t)v.percussion_period;
-    pattern_out[6] = timesig_of_mask(v.enable);
-    pattern_out[7] = (v.enable == compound_mask()) ? 1 : 0;
+    pattern_out[0] = (int32_t)(uintptr_t)factory_out.notes;
+    pattern_out[1] = (int32_t)(uintptr_t)factory_out.percussion;
+    pattern_out[2] = (int32_t)(uint32_t)factory_out.enable;
+    pattern_out[3] = (int32_t)(uint32_t)(factory_out.enable >> 32);
+    pattern_out[4] = (int32_t)MP7_PATTERN_COLUMNS;
+    pattern_out[5] = (int32_t)MP7_PATTERN_COLUMNS;
+    pattern_out[6] = timesig_of_mask(factory_out.enable);
+    pattern_out[7] = (factory_out.enable == compound_mask()) ? 1 : 0;
     pattern_out[8] = 1;
     return pattern_out;
 }
@@ -221,62 +248,6 @@ WASM_EXPORT void poppy_set_pattern_source(void *ctx, int32_t source)
 WASM_EXPORT int32_t poppy_get_pattern_source(const void *ctx)
 {
     return (mp7_get_pattern_source(ctx) == MP7_PATTERN_SOURCE_USER) ? 1 : 0;
-}
-
-/*
- * Fill every user slot with the rhythm the machine comes up with.
- *
- * The slots are not empty when the machine comes up: they hold the
- * rhythms of the two banks, the ten of bank A and the ten of bank B. They
- * are the rhythms the machine was given, and the user writes over them: a
- * slot that was written keeps what was written in it, and a slot that was
- * not written goes back to the rhythm that came with the machine.
- *
- * The rhythms are the engine's own, so the panel never has to carry them.
- */
-WASM_EXPORT void poppy_seed_user_patterns(void *ctx)
-{
-    unsigned int rhythm;
-
-    for (rhythm = 0u; rhythm < (unsigned int)MP7_USER_PATTERN_COUNT; rhythm++) {
-        struct mp7_user_pattern pattern;
-
-        if (!mp7_get_default_user_pattern(rhythm, &pattern)) {
-            continue;
-        }
-
-        mp7_set_user_pattern(ctx, rhythm, &pattern);
-    }
-}
-
-/*
- * The rhythm a user slot comes up with.
- *
- * It is the rhythm of the machine and not the pattern in the slot: the
- * panel asks for it to put a slot back the way it came, and the pattern
- * that was written in the slot does not change it.
- */
-WASM_EXPORT int32_t *poppy_default_user_pattern(int32_t index)
-{
-    uint64_t mask;
-
-    if (!mp7_get_default_user_pattern((unsigned int)index, &default_out)) {
-        pattern_out[8] = 0;
-        return pattern_out;
-    }
-
-    mask = mp7_timesig_enable_mask(default_out.timesig);
-
-    pattern_out[0] = (int32_t)(uintptr_t)default_out.notes;
-    pattern_out[1] = 0;
-    pattern_out[2] = (int32_t)(uint32_t)mask;
-    pattern_out[3] = (int32_t)(uint32_t)(mask >> 32);
-    pattern_out[4] = default_out.notes_period;
-    pattern_out[5] = 0;
-    pattern_out[6] = default_out.timesig;
-    pattern_out[7] = (mask == compound_mask()) ? 1 : 0;
-    pattern_out[8] = 1;
-    return pattern_out;
 }
 
 /* Copy a pattern into a user slot. The notes are read from the wasm heap.

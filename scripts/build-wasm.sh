@@ -3,9 +3,8 @@
 # Fetch the engine and build the wasm glue.
 #
 # The engine is libpoppy. Its sources are taken from LIBPOPPY_SOURCE and
-# copied into LIBPOPPY_DIR, where the local patches are applied. The
-# source tree is never written to: it may be a checkout that belongs to
-# somebody else.
+# copied into LIBPOPPY_DIR, where they are compiled. The source tree is
+# never written to: it may be a checkout that belongs to somebody else.
 #
 # The source is the sibling checkout of the library when there is one
 # (../minipops), because it carries the newest API. Otherwise the pinned
@@ -16,7 +15,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPPY_REPO="${LIBPOPPY_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
-LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-2b929a867f2c943d1efe12e9d59d658e8175435a}"
+LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-5b009e043359d66dea06a41bb59ec3ae4aadf710}"
 # The checkout of the library that carries the newest API.
 LIBPOPPY_SIBLING="${LIBPOPPY_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.
@@ -94,35 +93,9 @@ if [ -f "$LIBPOPPY_SOURCE/LICENSE" ]; then
     cp "$LIBPOPPY_SOURCE/LICENSE" "$LIBPOPPY_DIR/LICENSE"
 fi
 
-# The copy is a repository of its own, so the patches can be applied with
-# git: git apply is strict about the context of a hunk, so a patch that
-# does not fit the engine is an error and not a silent change.
-(
-    cd "$LIBPOPPY_DIR"
-    git init -q .
-    git add -A
-    git -c user.email=build@poppy-web -c user.name=poppy-web \
-        commit -q -m "the engine sources, as they were fetched"
-)
-
-# The local patches. They are applied to the copy above, so every machine
-# builds the same engine. A patch that does not apply is an error: it has
-# to be rebased on the pinned commit first.
-PATCH_DIR="$ROOT/patches"
-if [ -d "$PATCH_DIR" ]; then
-    for patch in "$PATCH_DIR"/*.patch; do
-        [ -e "$patch" ] || continue
-        name="$(basename "$patch")"
-        if ! git -C "$LIBPOPPY_DIR" apply -p1 --check "$patch" >/dev/null 2>&1; then
-            echo "error: the patch does not apply to the pinned engine: $name" >&2
-            echo "       rebase it on $LIBPOPPY_COMMIT and try again" >&2
-            exit 1
-        fi
-        git -C "$LIBPOPPY_DIR" apply -p1 "$patch"
-        echo "applied $name"
-    done
-fi
-
+# The engine is built as it comes: the panel is written against the API of
+# the library, and the library is never patched here. A panel that needs
+# something the library does not have asks the library for it.
 mkdir -p "$OUT_DIR"
 
 # The version of the engine that was just taken, so the panel can name the
@@ -147,7 +120,7 @@ cat > "$OUT_DIR/version.ts" <<EOF
 export const LIBPOPPY_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
 EOF
 
-EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_voice_param","_poppy_set_accent_gain","_poppy_panel_state","_poppy_factory_pattern","_poppy_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_seed_user_patterns","_poppy_set_user_pattern","_poppy_user_pattern","_poppy_default_user_pattern"]'
+EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_snare1_decay","_poppy_set_snare1_cutoff","_poppy_set_hihat_cutoff","_poppy_set_accent_gain","_poppy_panel_state","_poppy_factory_pattern","_poppy_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
 
 # The extended build of the engine: it carries the 20 user pattern slots and
 # the switch that points the sequencer at them. The panel's extended mode

@@ -9,7 +9,6 @@ import {
   PATTERN_COLUMNS,
   TIMESIG,
   TIMESIG_NONE,
-  VOICE_PARAM,
   timesigOf,
   type EngineCommand,
   type EngineEvent,
@@ -245,9 +244,9 @@ class PoppyProcessor extends AudioWorkletProcessor {
     );
     module._poppy_stop_rhythms(this.context);
 
-    // The user patterns start as copies of the factory rhythms, so the
-    // extended mode has something to play before anything is written.
-    module._poppy_seed_user_patterns(this.context);
+    // The user slots come up empty: the panel writes the rhythms of the
+    // two banks into them, so the extended mode has something to play
+    // before anything is written.
 
     this.emit({ type: 'ready' });
     this.readPanel();
@@ -309,13 +308,21 @@ class PoppyProcessor extends AudioWorkletProcessor {
           command.value,
         );
         break;
-      case 'voiceParam':
-        module._poppy_set_voice_param(
+      case 'instrPan':
+        module._poppy_set_instr_pan(
           this.context,
           command.instrument,
-          command.param,
           command.value,
         );
+        break;
+      case 'snare1Decay':
+        module._poppy_set_snare1_decay(this.context, command.value);
+        break;
+      case 'snare1Cutoff':
+        module._poppy_set_snare1_cutoff(this.context, command.value);
+        break;
+      case 'hihatCutoff':
+        module._poppy_set_hihat_cutoff(this.context, command.value);
         break;
       case 'accentGain':
         module._poppy_set_accent_gain(this.context, command.value);
@@ -325,10 +332,9 @@ class PoppyProcessor extends AudioWorkletProcessor {
         // stereo field. The instruments that stay in the centre are not
         // touched at all.
         for (const instrument of SPREAD_INSTRUMENTS) {
-          module._poppy_set_voice_param(
+          module._poppy_set_instr_pan(
             this.context,
             instrument,
-            VOICE_PARAM.pan,
             spreadPanQ16(command.value, instrument),
           );
         }
@@ -361,9 +367,6 @@ class PoppyProcessor extends AudioWorkletProcessor {
       }
       case 'userPatternRequest':
         this.sendUserPattern(command.index);
-        break;
-      case 'defaultUserPatternRequest':
-        this.sendDefaultUserPattern(command.index);
         break;
     }
 
@@ -528,56 +531,6 @@ class PoppyProcessor extends AudioWorkletProcessor {
 
     this.emit({
       type: 'userPattern',
-      index: slot,
-      pattern: {
-        notes,
-        timesig: timesigOf(heap[base + 6] ?? TIMESIG_NONE),
-        period: notesPeriod,
-      },
-    });
-  }
-
-  /**
-   * Read the rhythm a user slot comes up with.
-   *
-   * It is the rhythm of the machine and not the pattern in the slot: the
-   * panel puts a slot back the way it came with it.
-   */
-  private sendDefaultUserPattern(slot: number): void {
-    const module = this.module;
-    if (module === null) {
-      return;
-    }
-
-    const pointer = module._poppy_default_user_pattern(slot);
-    const base = pointer >> 2;
-    const heap = module.HEAP32;
-
-    if ((heap[base + 8] ?? 0) === 0) {
-      this.emit({
-        type: 'defaultUserPattern',
-        index: slot,
-        pattern: {
-          notes: new Array<number>(USER_PATTERN_COLUMNS).fill(0),
-          timesig: TIMESIG['4/4'],
-          period: USER_PATTERN_COLUMNS,
-        },
-      });
-      return;
-    }
-
-    const notesPointer = (heap[base] ?? 0) >>> 0;
-    const notesPeriod = heap[base + 4] ?? 0;
-    const u16Base = module.HEAPU16;
-    const notesStart = notesPointer >> 1;
-
-    const notes: number[] = new Array<number>(USER_PATTERN_COLUMNS).fill(0);
-    for (let index = 0; index < notesPeriod; index += 1) {
-      notes[index] = u16Base[notesStart + index] ?? 0;
-    }
-
-    this.emit({
-      type: 'defaultUserPattern',
       index: slot,
       pattern: {
         notes,

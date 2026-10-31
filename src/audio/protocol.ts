@@ -136,27 +136,6 @@ export const INSTR_PERCUSSION = [
 ] as const;
 
 /**
- * The parameters of a voice the engine can move.
- *
- * The numbers are the order of the engine's own list of them, so the panel
- * and the engine speak the same names. The units are the ones the engine
- * uses: Q16 for the volume, microseconds for the times, Hz for the
- * frequencies, Q8.8 for the resonance and Q16 for the place of the voice
- * in the stereo field.
- */
-export const VOICE_PARAM = {
-  volume: 0,
-  attack: 1,
-  decay: 2,
-  cutoff: 3,
-  highpass: 4,
-  resonance: 5,
-  pan: 6,
-} as const;
-
-export type VoiceParam = (typeof VOICE_PARAM)[keyof typeof VOICE_PARAM];
-
-/**
  * The accent flag of a pattern column.
  *
  * The fifteen instruments fill the lower fifteen bits of a column, so the
@@ -230,9 +209,9 @@ export function timesigOfLabel(label: string): TimeSignature | null {
   return null;
 }
 
-// The engine's grid is a fixed 64 column cycle. A rhythm may store only its
-// shortest repeating period (16, 32 or 64 columns); the rest of the cycle
-// repeats it.
+// The engine's grid is a fixed 64 column cycle. The engine stores a rhythm
+// in its shortest repeating period (16, 32 or 64 columns), but a view always
+// carries the whole cycle: the period is repeated out to it.
 export const PATTERN_COLUMNS = 64;
 
 // The cycle is read as four bars of sixteen steps. A step is a sixteenth
@@ -258,7 +237,16 @@ export interface PatternView {
   percussion: number[];
   enableLo: number;
   enableHi: number;
+  /**
+   * The length of the grid the view carries.
+   *
+   * The view of a factory rhythm is the whole cycle: the engine repeats the
+   * period a rhythm is stored in out to the 64 columns of the cycle before
+   * the panel sees it, so its period is the length of the cycle. A user
+   * pattern keeps the period it was written with.
+   */
   notesPeriod: number;
+  /** The length of the shared percussion layer: a whole cycle as well. */
   percussionPeriod: number;
   /**
    * The time signature of the pattern.
@@ -301,21 +289,22 @@ export type EngineCommand =
   | { type: 'volume'; value: number }
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }
-  | { type: 'voiceParam'; instrument: number; param: VoiceParam; value: number }
+  | { type: 'instrPan'; instrument: number; value: number }
+  | { type: 'snare1Decay'; value: number }
+  | { type: 'snare1Cutoff'; value: number }
+  | { type: 'hihatCutoff'; value: number }
   | { type: 'accentGain'; value: number }
   | { type: 'spread'; value: number }
   | { type: 'pattern'; rhythm: number }
   | { type: 'source'; source: PatternSource }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
-  | { type: 'userPatternRequest'; index: number }
-  | { type: 'defaultUserPatternRequest'; index: number };
+  | { type: 'userPatternRequest'; index: number };
 
 export type EngineEvent =
   | { type: 'ready' }
   | { type: 'panel'; state: PanelState }
   | { type: 'pattern'; view: PatternView }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
-  | { type: 'defaultUserPattern'; index: number; pattern: UserPattern }
   | { type: 'error'; message: string };
 
 /**

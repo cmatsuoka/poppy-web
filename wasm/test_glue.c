@@ -4,9 +4,9 @@
  * The glue is Emscripten code, but it is plain C: the stub
  * emscripten/emscripten.h lets it be compiled with the host compiler
  * against the same library sources the wasm build uses. The check covers
- * the parts the panel depends on: the empty user patterns the engine starts
- * with, the source switch, the round trip through a user slot and the
- * accent flag of a column.
+ * the parts the panel depends on: the user slots the engine starts with,
+ * the source switch, the round trip through a user slot, the accent flag
+ * of a column and the settings the band of knobs reaches for.
  *
  * The glue keeps its pointers in int32, which is what wasm wants but not
  * what a 64-bit host build wants. The binary is therefore linked
@@ -91,81 +91,41 @@ int main(void)
 
     void *ctx = poppy_create(44100);
     check(ctx != 0, "the context is allocated");
-    poppy_seed_user_patterns(ctx);
 
-    /* Every seeded slot holds the rhythm the machine comes up with: the
-     * rhythm of the slot, the way the engine holds it. */
-    for (int rhythm = 0; rhythm < MP7_RHYTHM_COUNT; rhythm++) {
-        struct mp7_user_pattern slot;
-        struct mp7_user_pattern default_rhythm;
+    /* The user slots of the engine come up empty: the panel writes the
+     * rhythms of the two banks into them. */
+    struct mp7_user_pattern empty;
+    check(mp7_get_user_pattern(ctx, 0, &empty) == 0,
+          "the user slots come up empty");
 
-        if (!mp7_get_user_pattern(ctx, (unsigned int)rhythm, &slot)) {
-            printf("FAIL : slot %d is empty\n", rhythm);
-            failures++;
-            continue;
-        }
+    /* The view of a factory rhythm carries the whole cycle: the period the
+     * rhythm is stored in is repeated out to the 64 columns of the cycle
+     * before the panel sees it. */
+    int32_t *factory = poppy_factory_pattern(6);
+    check(factory[8] == 1, "the view of a factory rhythm is valid");
+    check(factory[4] == (int32_t)MP7_PATTERN_COLUMNS,
+          "the view of a factory rhythm is a whole cycle long");
+    check(factory[5] == (int32_t)MP7_PATTERN_COLUMNS,
+          "the shared percussion layer is a whole cycle long");
 
-        if (!mp7_get_default_user_pattern((unsigned int)rhythm,
-                                          &default_rhythm)) {
-            printf("FAIL : slot %d has no rhythm of its own\n", rhythm);
-            failures++;
-            continue;
-        }
-
-        if ((memcmp(slot.notes, default_rhythm.notes,
-                    sizeof(slot.notes)) != 0) ||
-            (slot.timesig != default_rhythm.timesig) ||
-            (slot.notes_period != default_rhythm.notes_period)) {
-            printf("FAIL : slot %d does not hold the rhythm of the machine\n",
-                   rhythm);
-            failures++;
+    /* The grid of the view is the grid the engine holds, column for
+     * column, so the panel sees the whole cycle. */
+    struct mp7_pattern_view raw;
+    mp7_get_factory_pattern((mp7_rhythm)6, &raw);
+    uint16_t *factory_notes = (uint16_t *)(uintptr_t)factory[0];
+    int same = 1;
+    for (int column = 0; column < (int)MP7_PATTERN_COLUMNS; column++) {
+        if (factory_notes[column] != raw.notes[column]) {
+            same = 0;
         }
     }
-    check(failures == 0, "every seeded slot holds the rhythm of the machine");
+    check(same, "the grid of a view is the grid of the engine");
 
-    /* The rhythm a slot comes up with does not change when the slot is
-     * written: the machine keeps it, and the host can always ask for it. */
-    struct mp7_user_pattern default_rhythm;
-    check(mp7_get_default_user_pattern(6, &default_rhythm),
-          "the rhythm of a slot can be read");
-    check(default_rhythm.notes_period == MP7_USER_PATTERN_COLUMNS,
-          "the rhythm of a slot is a full cycle long");
-    check(mp7_get_default_user_pattern(MP7_USER_PATTERN_COUNT, &default_rhythm) == 0,
-          "a slot out of range has no rhythm");
-
-    int32_t *default_view = poppy_default_user_pattern(2);
-    check(default_view[8] == 1, "the view of a default rhythm is valid");
-    check(default_view[6] == MP7_TIMESIG_6_8,
-          "the view of a default rhythm carries its meter");
-    check(default_view[7] == 1,
-          "a default rhythm in 6/8 plays on the compound grid");
-    check(poppy_default_user_pattern(99)[8] == 0,
-          "a slot out of range has no view");
-
-    /* Every hit of a rhythm the machine comes up with is heard. A hit in a
-     * column the meter leaves out is never played, so a rhythm that carries
-     * one is a rhythm with a silent part in it. */
-    int silent = 0;
-    for (int rhythm = 0; rhythm < MP7_USER_PATTERN_COUNT; rhythm++) {
-        struct mp7_user_pattern pattern;
-        uint64_t mask;
-
-        if (!mp7_get_default_user_pattern((unsigned int)rhythm, &pattern)) {
-            continue;
-        }
-
-        mask = mp7_timesig_enable_mask(pattern.timesig);
-        for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
-            if ((pattern.notes[column] != 0) &&
-                (((mask >> column) & 1u) == 0u)) {
-                printf("FAIL : the rhythm of slot %d has a hit in column %d,"
-                       " which its meter skips\n", rhythm, column);
-                silent = 1;
-            }
-        }
-    }
-    check(silent == 0,
-          "every hit of a rhythm the machine comes up with is heard");
+    /* A rhythm that does not exist has no view. */
+    check(poppy_factory_pattern(MP7_RHYTHM_COUNT)[8] == 0,
+          "a rhythm out of range has no view");
+    check(poppy_factory_pattern(-1)[8] == 0,
+          "a rhythm before the first one has no view");
 
     /* The row of the 5/4 meter: the mask the engine holds for it is the
      * row the rhythms of the panel were written on.
@@ -185,17 +145,22 @@ int main(void)
      * plays the factory rhythm. */
     static int16_t preset[20480];
     static int16_t user[20480];
+    static uint16_t bass_notes[MP7_USER_PATTERN_COLUMNS];
+
+    for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
+        bass_notes[column] = (uint16_t)((column % 8) == 0 ? (1u << 0) : 0);
+    }
 
     poppy_reset(ctx);
-    poppy_seed_user_patterns(ctx);
     poppy_select_rhythm(ctx, 0, 1 << 6);
     for (int i = 0; i < 20; i++) {
         poppy_process(ctx, preset + i * 512 * 2, 512);
     }
 
     poppy_reset(ctx);
-    poppy_seed_user_patterns(ctx);
     poppy_set_pattern_source(ctx, 1);
+    poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)bass_notes,
+                            MP7_TIMESIG_4_4, 64);
     poppy_select_rhythm(ctx, 0, 1 << 6);
     for (int i = 0; i < 20; i++) {
         poppy_process(ctx, user + i * 512 * 2, 512);
@@ -203,6 +168,15 @@ int main(void)
 
     check(peak(preset, 20480) > 0, "the preset source plays the factory rhythm");
     check(peak(user, 20480) > 0, "the user source plays the rhythm of the slot");
+
+    /* A pattern the user wrote survives a reset: the reset puts the voices
+     * and the mix controls back, not the work of the user. */
+    poppy_reset(ctx);
+    struct mp7_user_pattern kept;
+    check(mp7_get_user_pattern(ctx, 6, &kept),
+          "the pattern of a slot survives a reset");
+    check(memcmp(kept.notes, bass_notes, sizeof(bass_notes)) == 0,
+          "the pattern of a slot is unchanged by a reset");
 
     /* A written pattern comes back as it was written. */
     static uint16_t notes[MP7_USER_PATTERN_COLUMNS];
@@ -358,13 +332,15 @@ int main(void)
     check(peak(loud_accent, 20480) > peak(unity_accent, 20480),
           "a higher accent gain is louder");
 
-    /* The adjustable parameters of a voice: the level, the decay and the
-     * centre of the band-pass. The snare is the voice the band of knobs
-     * reaches for. */
+    /* The settings the band of knobs reaches for: the level of the snare,
+     * the decay and the centre of its band-pass, the corner of the
+     * high-pass of the hi-hat and the place of a voice in the stereo
+     * field. */
     static uint16_t snare_notes[MP7_USER_PATTERN_COLUMNS];
     static int16_t snare[20480];
     static int16_t muted[20480];
     static int16_t dark[20480];
+    static int16_t bright[20480];
 
     for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
         snare_notes[column] = (uint16_t)(1u << 1);
@@ -375,81 +351,51 @@ int main(void)
     check(peak(snare, 20480) > 0, "the snare is heard");
 
     prepare_pattern(ctx, 9, snare_notes);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_VOLUME, 0) == 1,
-          "the level of a voice can be moved");
+    poppy_set_instr_gain(ctx, MP7_INSTR_SNARE_1, 0);
     render(ctx, muted, 20480);
     check(peak(muted, 20480) == 0, "a voice at level zero is silent");
 
     prepare_pattern(ctx, 9, snare_notes);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 800) == 1,
-          "the cutoff of a voice can be moved");
+    poppy_set_snare1_cutoff(ctx, 1000);
     render(ctx, dark, 20480);
     check(memcmp(dark, snare, sizeof(snare)) != 0,
           "a lower cutoff changes the voice");
 
     prepare_pattern(ctx, 9, snare_notes);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_DECAY, 200000) == 1,
-          "the decay of a voice can be moved");
+    poppy_set_snare1_decay(ctx, 65536 / 4);
     render(ctx, dark, 20480);
     check(memcmp(dark, snare, sizeof(snare)) != 0,
           "a shorter decay changes the voice");
 
-    /* A value outside the range of the parameter, an instrument that does
-     * not exist and a parameter that does not exist are all refused. */
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 0) == 0,
-          "a cutoff below the range is refused");
-    check(poppy_set_voice_param(ctx, 99, MP7_VOICE_CUTOFF, 5000) == 0,
-          "an instrument that does not exist is refused");
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, 99, 5000) == 0,
-          "a parameter that does not exist is refused");
+    static uint16_t hihat_notes[MP7_USER_PATTERN_COLUMNS];
+    static int16_t hihat[20480];
 
-    /* A knob that is turned while the voice is ringing does not make the
-     * note click: the level fades into its new value, and the other
-     * parameters wait for the next note of the voice. */
-    static int16_t ringing[20480];
-    static int16_t fading[1024];
-    static int16_t faded[40960];
+    for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
+        hihat_notes[column] = (uint16_t)((column % 8) == 0
+                                         ? (1u << MP7_INSTR_HIHAT)
+                                         : 0);
+    }
 
-    prepare_pattern(ctx, 9, snare_notes);
-    render(ctx, ringing, 20480);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_VOLUME, 0) == 1,
-          "the level of a voice can be moved while it rings");
-    render(ctx, fading, 1024);
-    check(peak(fading, 1024) > 0,
-          "a level that is moved while the voice rings fades out");
+    prepare_pattern(ctx, 9, hihat_notes);
+    render(ctx, hihat, 20480);
+    check(peak(hihat, 20480) > 0, "the hi-hat is heard");
 
-    render(ctx, faded, 40960);
-    check(peak(faded + 38912, 2048) == 0,
-          "the level of the voice reaches its target");
+    prepare_pattern(ctx, 9, hihat_notes);
+    poppy_set_hihat_cutoff(ctx, 15000);
+    render(ctx, bright, 20480);
+    check(memcmp(bright, hihat, sizeof(hihat)) != 0,
+          "a higher cutoff of the hi-hat changes the voice");
 
-    /* A parameter that is not the level waits for the next note: the note
-     * that is sounding keeps the settings it started with. */
-    static int16_t before[2048];
-    static int16_t after[2048];
+    /* A value outside the range of a parameter is clamped by the engine,
+     * and an instrument that does not exist is ignored. */
+    poppy_set_snare1_cutoff(ctx, 0);
+    poppy_set_hihat_cutoff(ctx, 0);
+    poppy_set_instr_gain(ctx, 99, 0);
+    poppy_set_instr_pan(ctx, 99, 0);
 
-    poppy_reset(ctx);
-    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
-    render(ctx, before, 2048);
-
-    poppy_reset(ctx);
-    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 900) == 1,
-          "the cutoff of a voice can be moved while it rings");
-    render(ctx, after, 2048);
-    check(memcmp(before, after, sizeof(before)) == 0,
-          "a note that is sounding keeps its cutoff");
-
-    poppy_reset(ctx);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 900) == 1,
-          "the cutoff of a voice can be moved");
-    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
-    render(ctx, after, 2048);
-    check(memcmp(before, after, sizeof(before)) != 0,
-          "the next note of a voice takes the parameters that were moved");
-
-    /* The parameters of a voice survive a sample-rate change: the engine
-     * builds the voices again, and the settings the panel gave them are
-     * put back with them. */
+    /* The settings of the band of knobs survive a sample-rate change: the
+     * engine builds the voices again and puts the settings back with
+     * them. */
     static int16_t factory_cutoff[20480];
     static int16_t moved_cutoff[20480];
 
@@ -458,13 +404,12 @@ int main(void)
     render(ctx, factory_cutoff, 20480);
 
     prepare_pattern(ctx, 9, snare_notes);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_CUTOFF, 900) == 1,
-          "the cutoff of a voice can be moved");
+    poppy_set_snare1_cutoff(ctx, 1000);
     mp7_set_sample_rate(ctx, 22050);
     render(ctx, moved_cutoff, 20480);
 
     check(memcmp(moved_cutoff, factory_cutoff, sizeof(moved_cutoff)) != 0,
-          "the parameters of a voice survive a sample-rate change");
+          "the settings of a voice survive a sample-rate change");
     mp7_set_sample_rate(ctx, 44100);
 
     /* The place of a voice in the stereo field. The pan is a place
@@ -475,16 +420,14 @@ int main(void)
     static int16_t centred[4096];
 
     poppy_reset(ctx);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65536) == 1,
-          "the pan of a voice can be moved");
+    poppy_set_instr_pan(ctx, MP7_INSTR_SNARE_1, 65536);
     poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
     render(ctx, panned, 4096);
     check(channel_peak(panned, 4096, 1) > channel_peak(panned, 4096, 0),
           "a voice panned hard right is louder in the right channel");
 
     poppy_reset(ctx);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 0) == 1,
-          "the pan of a voice can be moved to the left");
+    poppy_set_instr_pan(ctx, MP7_INSTR_SNARE_1, 0);
     poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
     render(ctx, panned, 4096);
     check(channel_peak(panned, 4096, 0) > channel_peak(panned, 4096, 1),
@@ -496,34 +439,28 @@ int main(void)
     check(channel_peak(centred, 4096, 0) == channel_peak(centred, 4096, 1),
           "a voice in the centre of the field is the same in both channels");
 
-    /* A pan outside the range of the parameter is refused. */
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65537) == 0,
-          "a pan above the range is refused");
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, -1) == 0,
-          "a pan below the range is refused");
+    /* A pan outside the range of the parameter is clamped by the engine. */
+    poppy_reset(ctx);
+    poppy_set_instr_pan(ctx, MP7_INSTR_SNARE_1, 65537);
+    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    render(ctx, panned, 4096);
+    check(channel_peak(panned, 4096, 1) > channel_peak(panned, 4096, 0),
+          "a pan above the range is clamped to the right");
 
-    /* The pan waits for the next note of the voice, like the parameters
-     * that are not the level: the note that is sounding keeps the place
-     * it started with. */
+    /* The pan is taken at once, also by a note that is already sounding. */
+    static int16_t before[2048];
+    static int16_t after[2048];
+
     poppy_reset(ctx);
     poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
     render(ctx, before, 2048);
 
     poppy_reset(ctx);
     poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65536) == 1,
-          "the pan of a voice can be moved while it rings");
-    render(ctx, after, 2048);
-    check(memcmp(before, after, sizeof(before)) == 0,
-          "a note that is sounding keeps its pan");
-
-    poppy_reset(ctx);
-    check(poppy_set_voice_param(ctx, MP7_INSTR_SNARE_1, MP7_VOICE_PAN, 65536) == 1,
-          "the pan of a voice can be moved");
-    poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
+    poppy_set_instr_pan(ctx, MP7_INSTR_SNARE_1, 65536);
     render(ctx, after, 2048);
     check(memcmp(before, after, sizeof(before)) != 0,
-          "the next note of a voice takes the pan that was moved");
+          "a note that is sounding takes the pan that was moved");
 
     poppy_destroy(ctx);
     printf("%s\n",

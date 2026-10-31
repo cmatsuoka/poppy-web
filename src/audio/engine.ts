@@ -9,7 +9,6 @@ import {
   type PatternSource,
   type PatternView,
   type UserPattern,
-  type VoiceParam,
 } from './protocol';
 
 const Q16 = 65536;
@@ -24,8 +23,14 @@ interface Settings {
   accentGain: number;
   /** The spread of the instruments over the stereo field, -1 to 1. */
   spread: number;
-  /** The parameters of the voices that have been moved, by instrument. */
-  voiceParams: Map<number, Map<VoiceParam, number>>;
+  /** The place of every instrument in the stereo field, Q16. */
+  instrPan: number[];
+  /** The decay of the snare 1, as a multiplier of the factory decay, Q16. */
+  snare1Decay: number;
+  /** The centre of the band-pass of the snare 1, in Hz. */
+  snare1Cutoff: number;
+  /** The corner of the high-pass of the hi-hat, in Hz. */
+  hihatCutoff: number;
 }
 
 /**
@@ -62,7 +67,12 @@ function defaultSettings(): Settings {
     // The instruments stand in the centre of the stereo field, the way
     // the engine comes up.
     spread: 0,
-    voiceParams: new Map<number, Map<VoiceParam, number>>(),
+    // Every instrument stands in the centre of the stereo field.
+    instrPan: Array.from({ length: 15 }, () => Q16 / 2),
+    // The factory decay of the snare 1 and the factory cut-offs.
+    snare1Decay: Q16,
+    snare1Cutoff: 5500,
+    hihatCutoff: 1000,
   };
 }
 
@@ -86,11 +96,6 @@ export class PoppyEngine {
     { resolve: (pattern: UserPattern) => void; reject: (reason: Error) => void }
   >();
   private userPatternPending = new Map<number, Promise<UserPattern>>();
-  private defaultUserPatternRequests = new Map<
-    number,
-    { resolve: (pattern: UserPattern) => void; reject: (reason: Error) => void }
-  >();
-  private defaultUserPatternPending = new Map<number, Promise<UserPattern>>();
   // A missing worklet is not something a retry can fix, so the failure is
   // latched and the engine stops trying to build a node.
   private fatal: Error | null = null;
@@ -215,19 +220,43 @@ export class PoppyEngine {
   }
 
   /**
-   * Move one parameter of one voice: the level, the attack, the decay, the
-   * centre of the band-pass, the corner of the high-pass or the resonance
-   * of the band-pass. The value is in the unit the engine uses for that
-   * parameter.
+   * The place of an instrument in the stereo field, Q16.
+   *
+   * Zero is hard left, 65536 is hard right and 32768 - the place every
+   * instrument comes up in - is the centre of the field.
    */
-  setVoiceParam(instrument: number, param: VoiceParam, value: number): void {
-    let params = this.settings.voiceParams.get(instrument);
-    if (params === undefined) {
-      params = new Map<VoiceParam, number>();
-      this.settings.voiceParams.set(instrument, params);
+  setInstrumentPan(instrument: number, value: number): void {
+    if (instrument < 0 || instrument >= this.settings.instrPan.length) {
+      return;
     }
-    params.set(param, value);
-    this.post({ type: 'voiceParam', instrument, param, value });
+    this.settings.instrPan[instrument] = value;
+    this.post({ type: 'instrPan', instrument, value });
+    this.wake();
+  }
+
+  /**
+   * The decay of the snare 1, as a multiplier of the factory decay, Q16.
+   *
+   * 65536 is the factory decay: the snare rings as long as it does on the
+   * machine.
+   */
+  setSnare1Decay(value: number): void {
+    this.settings.snare1Decay = value;
+    this.post({ type: 'snare1Decay', value });
+    this.wake();
+  }
+
+  /** The centre of the band-pass of the snare 1, in Hz. */
+  setSnare1Cutoff(value: number): void {
+    this.settings.snare1Cutoff = value;
+    this.post({ type: 'snare1Cutoff', value });
+    this.wake();
+  }
+
+  /** The corner of the high-pass of the hi-hat, in Hz. */
+  setHihatCutoff(value: number): void {
+    this.settings.hihatCutoff = value;
+    this.post({ type: 'hihatCutoff', value });
     this.wake();
   }
 
@@ -321,37 +350,6 @@ export class PoppyEngine {
       });
 
     this.userPatternPending.set(index, request);
-    return request;
-  }
-
-  /**
-   * Read the rhythm a user slot comes up with.
-   *
-   * It is the rhythm of the machine and not the pattern in the slot: the
-   * pattern that was written in the slot does not change it, so the panel
-   * can always put a slot back the way it came.
-   */
-  getDefaultUserPattern(index: number): Promise<UserPattern> {
-    const inflight = this.defaultUserPatternPending.get(index);
-    if (inflight !== undefined) {
-      return inflight;
-    }
-
-    const request = new Promise<UserPattern>((resolve, reject) => {
-      this.defaultUserPatternRequests.set(index, { resolve, reject });
-      this.post({ type: 'defaultUserPatternRequest', index });
-      this.wake();
-    })
-      .then((pattern) => {
-        this.defaultUserPatternPending.delete(index);
-        return pattern;
-      })
-      .catch((error: unknown) => {
-        this.defaultUserPatternPending.delete(index);
-        throw error;
-      });
-
-    this.defaultUserPatternPending.set(index, request);
     return request;
   }
 
@@ -506,11 +504,12 @@ export class PoppyEngine {
     });
     this.post({ type: 'accentGain', value: this.settings.accentGain });
     this.post({ type: 'spread', value: this.settings.spread });
-    this.settings.voiceParams.forEach((params, instrument) => {
-      params.forEach((value, param) => {
-        this.post({ type: 'voiceParam', instrument, param, value });
-      });
+    this.settings.instrPan.forEach((value, instrument) => {
+      this.post({ type: 'instrPan', instrument, value });
     });
+    this.post({ type: 'snare1Decay', value: this.settings.snare1Decay });
+    this.post({ type: 'snare1Cutoff', value: this.settings.snare1Cutoff });
+    this.post({ type: 'hihatCutoff', value: this.settings.hihatCutoff });
   }
 
   private post(command: EngineCommand): void {
@@ -558,14 +557,6 @@ export class PoppyEngine {
         }
         break;
       }
-      case 'defaultUserPattern': {
-        const handlers = this.defaultUserPatternRequests.get(event.index);
-        if (handlers !== undefined) {
-          this.defaultUserPatternRequests.delete(event.index);
-          handlers.resolve(event.pattern);
-        }
-        break;
-      }
       case 'error': {
         this.emitError(event.message);
         this.rejectAllPatternRequests(new Error(event.message));
@@ -589,9 +580,5 @@ export class PoppyEngine {
       handlers.reject(reason);
     }
     this.userPatternRequests.clear();
-    for (const handlers of this.defaultUserPatternRequests.values()) {
-      handlers.reject(reason);
-    }
-    this.defaultUserPatternRequests.clear();
   }
 }

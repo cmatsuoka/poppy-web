@@ -11,7 +11,6 @@ import {
   RHYTHM_BUTTON_COUNT,
   RHYTHM_NAMES,
   TIMESIG,
-  VOICE_PARAM,
   type Bank,
   type PanelState,
   type PatternSource,
@@ -33,11 +32,21 @@ import {
   patternToFile,
   type BankFile,
 } from './bank-file';
+import { DEFAULT_RHYTHMS, defaultRhythm } from '../audio/default-rhythms';
 import { loadUserPatterns, saveUserPatterns } from './user-store';
 import { UserNames, defaultUserName } from './user-names';
 import { meterOfTimesig } from './meter';
 
 const Q16 = 65536;
+
+/**
+ * The decay of the snare 1 the engine comes up with, in milliseconds.
+ *
+ * The engine takes the decay of the snare as a multiplier of the decay it
+ * comes up with, so the knob of the panel, which is in milliseconds,
+ * turns it into one.
+ */
+const SNARE1_FACTORY_DECAY_MS = 400;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -66,29 +75,15 @@ const BAND_MEMORY_COUNT = 4;
  * The settings the knobs of the band come up in, for the memory positions.
  *
  * A memory position keeps the settings of the knobs, and a position that
- * was not written comes up with the settings that belong to it. The first
- * position comes up with the settings of the advanced mode: a fuller
- * accent, a snare that is a little louder and shorter, a hi-hat that is
- * quieter and a little darker, the percussion further back and the
- * instruments spread wide over the stereo field. The other positions come
- * up with the settings the machine comes up with.
+ * was not written comes up with the settings that belong to it. Every
+ * position comes up with the settings the machine comes up with: the
+ * engine has one set of settings, and the panel has no other.
  *
  * The user may write over them: a knob that is turned writes into the
  * position that is selected, and the settings the position is given are
  * kept in the browser.
  */
-const BAND_MEMORY_DEFAULTS: Record<string, number>[] = [
-  {
-    accent: 1.6,
-    'sn1-vol': 1.08,
-    'sn1-decay': 316,
-    'sn1-cutoff': 5500,
-    'hh-vol': 0.71,
-    'hh-cutoff': 8300,
-    'perc-vol': 0.74,
-    spread: 0.59,
-  },
-];
+const BAND_MEMORY_DEFAULTS: Record<string, number>[] = [];
 
 /**
  * The knobs of the band that have a function.
@@ -142,30 +137,26 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       label: 'SN1 VOL',
       ariaLabel: 'Snare 1 level',
       min: 0,
-      max: 2,
+      max: 1,
       value: 1,
       valueText: (value) => `${Math.round(value * 100)}%`,
       onInput: (value) => {
-        engine.setVoiceParam(
-          INSTR_SNARE_1,
-          VOICE_PARAM.volume,
-          Math.round(value * Q16),
-        );
+        engine.setInstrumentGain(INSTR_SNARE_1, Math.round(value * Q16));
       },
     },
     {
       id: 'sn1-decay',
       label: 'SN1 DECAY',
       ariaLabel: 'Snare 1 decay',
-      min: 20,
-      max: 1000,
+      min: 100,
+      max: 1600,
       value: 400,
       valueText: (value) => `${Math.round(value)} ms`,
       onInput: (value) => {
-        engine.setVoiceParam(
-          INSTR_SNARE_1,
-          VOICE_PARAM.decay,
-          Math.round(value * 1000),
+        // The engine takes the decay as a multiplier of the factory decay,
+        // and the factory decay of the snare is 400 ms.
+        engine.setSnare1Decay(
+          Math.round((value / SNARE1_FACTORY_DECAY_MS) * Q16),
         );
       },
     },
@@ -173,16 +164,12 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'sn1-cutoff',
       label: 'SN1 CUTOFF',
       ariaLabel: 'Snare 1 cutoff',
-      min: 200,
-      max: 12000,
+      min: 1000,
+      max: 15000,
       value: 5500,
       valueText: (value) => `${(value / 1000).toFixed(1)} kHz`,
       onInput: (value) => {
-        engine.setVoiceParam(
-          INSTR_SNARE_1,
-          VOICE_PARAM.cutoff,
-          Math.round(value),
-        );
+        engine.setSnare1Cutoff(Math.round(value));
       },
     },
     {
@@ -190,27 +177,23 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       label: 'HH VOL',
       ariaLabel: 'Hi-hat level',
       min: 0,
-      max: 2,
+      max: 1,
       value: 1,
       valueText: (value) => `${Math.round(value * 100)}%`,
       onInput: (value) => {
-        engine.setVoiceParam(
-          INSTR_HIHAT,
-          VOICE_PARAM.volume,
-          Math.round(value * Q16),
-        );
+        engine.setInstrumentGain(INSTR_HIHAT, Math.round(value * Q16));
       },
     },
     {
       id: 'hh-cutoff',
       label: 'HH CUTOFF',
       ariaLabel: 'Hi-hat cutoff',
-      min: 1000,
-      max: 20000,
-      value: 10000,
+      min: 500,
+      max: 15000,
+      value: 1000,
       valueText: (value) => `${(value / 1000).toFixed(1)} kHz`,
       onInput: (value) => {
-        engine.setVoiceParam(INSTR_HIHAT, VOICE_PARAM.cutoff, Math.round(value));
+        engine.setHihatCutoff(Math.round(value));
       },
     },
     {
@@ -218,7 +201,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       label: 'PERC VOL',
       ariaLabel: 'Percussion level',
       min: 0,
-      max: 2,
+      max: 1,
       value: 1,
       valueText: (value) => `${Math.round(value * 100)}%`,
       onInput: (value) => {
@@ -227,7 +210,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
         // the rimshot.
         const level = Math.round(value * Q16);
         for (const instrument of INSTR_PERCUSSION) {
-          engine.setVoiceParam(instrument, VOICE_PARAM.volume, level);
+          engine.setInstrumentGain(instrument, level);
         }
       },
     },
@@ -1144,7 +1127,13 @@ export class Panel {
     // so the first rhythm is on the card before the first snapshot arrives.
     this.card.update(this.state);
 
-    // The slots of the engine come up with the rhythms of the two banks.
+    // The slots of the engine come up empty, so the rhythms of the two
+    // banks are written into them: a slot that was not written keeps the
+    // rhythm it came up with.
+    for (const [index, rhythm] of DEFAULT_RHYTHMS.entries()) {
+      this.engine.setUserPattern(index, rhythm);
+    }
+
     // The patterns of the last visit are put back over them, so the work
     // of the user is used instead of the rhythms that came with the
     // machine.
@@ -2524,7 +2513,7 @@ export class Panel {
    * rhythm the machine comes up with. The names of the patterns go back
    * with them: a name belongs to the pattern it names.
    */
-  private async discardUnsavedPatterns(): Promise<void> {
+  private discardUnsavedPatterns(): void {
     if (!this.patternsUnsaved) {
       return;
     }
@@ -2532,8 +2521,7 @@ export class Panel {
 
     const saved = loadUserPatterns();
     for (const slot of this.changedSlots) {
-      const restored =
-        saved.get(slot) ?? (await this.defaultUserPattern(slot));
+      const restored = saved.get(slot) ?? this.defaultUserPattern(slot);
       if (restored === null) {
         continue;
       }
@@ -2557,16 +2545,8 @@ export class Panel {
    * It is the rhythm of the machine and not the pattern in the slot: the
    * panel puts a slot back the way it came with it.
    */
-  private async defaultUserPattern(slot: number): Promise<UserPattern | null> {
-    try {
-      return await this.engine.getDefaultUserPattern(slot);
-    } catch (error: unknown) {
-      this.showStatus(
-        error instanceof Error ? error.message : String(error),
-        true,
-      );
-      return null;
-    }
+  private defaultUserPattern(slot: number): UserPattern | null {
+    return defaultRhythm(slot);
   }
 
   /**

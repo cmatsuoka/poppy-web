@@ -20,19 +20,16 @@ declare module '*poppy.mjs' {
     _poppy_set_volume(ctx: number, q16: number): void;
     _poppy_set_balance(ctx: number, q16: number): void;
     _poppy_set_instr_gain(ctx: number, instrument: number, q16: number): void;
-    _poppy_set_voice_param(
-      ctx: number,
-      instrument: number,
-      param: number,
-      value: number,
-    ): number;
+    _poppy_set_instr_pan(ctx: number, instrument: number, pan: number): void;
+    _poppy_set_snare1_decay(ctx: number, decayQ16: number): void;
+    _poppy_set_snare1_cutoff(ctx: number, cutoffHz: number): void;
+    _poppy_set_hihat_cutoff(ctx: number, cutoffHz: number): void;
     _poppy_set_accent_gain(ctx: number, q16: number): void;
     _poppy_panel_state(ctx: number): number;
     _poppy_factory_pattern(rhythm: number): number;
     _poppy_pattern(ctx: number, rhythm: number): number;
     _poppy_set_pattern_source(ctx: number, source: number): void;
     _poppy_get_pattern_source(ctx: number): number;
-    _poppy_seed_user_patterns(ctx: number): void;
     _poppy_set_user_pattern(
       ctx: number,
       index: number,
@@ -41,7 +38,6 @@ declare module '*poppy.mjs' {
       period: number,
     ): number;
     _poppy_user_pattern(ctx: number, index: number): number;
-    _poppy_default_user_pattern(index: number): number;
   }
 
   export interface PoppyModuleOptions {
