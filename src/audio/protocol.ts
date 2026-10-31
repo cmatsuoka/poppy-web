@@ -62,6 +62,41 @@ export const RHYTHM_COUNT = RHYTHM_NAMES.length;
 export const RHYTHM_BUTTON_COUNT = 10;
 
 /**
+ * The names of the rhythms the user slots come up with.
+ *
+ * The 20 user slots are not empty when the machine comes up: they hold the
+ * rhythms of the two banks, the ten of bank A and the ten of bank B. The
+ * rhythms themselves are the engine's own, and these are their names, in the
+ * order of the slots: the ten of bank A come first and the ten of bank B
+ * follow them.
+ *
+ * The names are written here as they are read, the way the factory names
+ * are. A name that the user gives to a pattern takes the place of these.
+ */
+export const ADVANCED_NAMES = [
+  'CALYPSO',
+  'REGGAE',
+  'JAZZ 1',
+  'JAZZ 5/4 1',
+  'DISCO 1',
+  '70S GERMAN',
+  'ROCK 5',
+  '16 BEAT 1',
+  'TECHNO',
+  '80S POP 1',
+  'BOLERO',
+  'MONTUNO',
+  'JAZZ 2',
+  'JAZZ 5/4 2',
+  'DISCO 2',
+  '70S FRENCH',
+  'ROCK 6',
+  '16 BEAT 2',
+  'HOUSE',
+  '80S POP 2',
+] as const;
+
+/**
  * The instruments the band of knobs reaches for, in the engine's voice
  * order: the bass is the first voice and the quijada the last.
  */
@@ -272,13 +307,15 @@ export type EngineCommand =
   | { type: 'pattern'; rhythm: number }
   | { type: 'source'; source: PatternSource }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
-  | { type: 'userPatternRequest'; index: number };
+  | { type: 'userPatternRequest'; index: number }
+  | { type: 'defaultUserPatternRequest'; index: number };
 
 export type EngineEvent =
   | { type: 'ready' }
   | { type: 'panel'; state: PanelState }
   | { type: 'pattern'; view: PatternView }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
+  | { type: 'defaultUserPattern'; index: number; pattern: UserPattern }
   | { type: 'error'; message: string };
 
 /**

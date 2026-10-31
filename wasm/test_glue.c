@@ -93,12 +93,11 @@ int main(void)
     check(ctx != 0, "the context is allocated");
     poppy_seed_user_patterns(ctx);
 
-    /* Every seeded slot is empty: no instrument plays, every column of the
-     * cycle is enabled and the grid is a full 64 columns long, so the write
-     * strip can write all four bars. */
+    /* Every seeded slot holds the rhythm the machine comes up with: the
+     * rhythm of the slot, the way the engine holds it. */
     for (int rhythm = 0; rhythm < MP7_RHYTHM_COUNT; rhythm++) {
         struct mp7_user_pattern slot;
-        int empty = 1;
+        struct mp7_user_pattern default_rhythm;
 
         if (!mp7_get_user_pattern(ctx, (unsigned int)rhythm, &slot)) {
             printf("FAIL : slot %d is empty\n", rhythm);
@@ -106,25 +105,83 @@ int main(void)
             continue;
         }
 
-        for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
-            if (slot.notes[column] != 0) {
-                empty = 0;
-            }
+        if (!mp7_get_default_user_pattern((unsigned int)rhythm,
+                                          &default_rhythm)) {
+            printf("FAIL : slot %d has no rhythm of its own\n", rhythm);
+            failures++;
+            continue;
         }
-        if (slot.timesig != MP7_TIMESIG_4_4) {
-            empty = 0;
-        }
-        if (slot.notes_period != MP7_USER_PATTERN_COLUMNS) {
-            empty = 0;
-        }
-        if (!empty) {
-            printf("FAIL : slot %d is not empty\n", rhythm);
+
+        if ((memcmp(slot.notes, default_rhythm.notes,
+                    sizeof(slot.notes)) != 0) ||
+            (slot.timesig != default_rhythm.timesig) ||
+            (slot.notes_period != default_rhythm.notes_period)) {
+            printf("FAIL : slot %d does not hold the rhythm of the machine\n",
+                   rhythm);
             failures++;
         }
     }
-    check(failures == 0, "every seeded slot is an empty pattern");
+    check(failures == 0, "every seeded slot holds the rhythm of the machine");
 
-    /* The user source plays the empty pattern in silence, the preset source
+    /* The rhythm a slot comes up with does not change when the slot is
+     * written: the machine keeps it, and the host can always ask for it. */
+    struct mp7_user_pattern default_rhythm;
+    check(mp7_get_default_user_pattern(6, &default_rhythm),
+          "the rhythm of a slot can be read");
+    check(default_rhythm.notes_period == MP7_USER_PATTERN_COLUMNS,
+          "the rhythm of a slot is a full cycle long");
+    check(mp7_get_default_user_pattern(MP7_USER_PATTERN_COUNT, &default_rhythm) == 0,
+          "a slot out of range has no rhythm");
+
+    int32_t *default_view = poppy_default_user_pattern(2);
+    check(default_view[8] == 1, "the view of a default rhythm is valid");
+    check(default_view[6] == MP7_TIMESIG_6_8,
+          "the view of a default rhythm carries its meter");
+    check(default_view[7] == 1,
+          "a default rhythm in 6/8 plays on the compound grid");
+    check(poppy_default_user_pattern(99)[8] == 0,
+          "a slot out of range has no view");
+
+    /* Every hit of a rhythm the machine comes up with is heard. A hit in a
+     * column the meter leaves out is never played, so a rhythm that carries
+     * one is a rhythm with a silent part in it. */
+    int silent = 0;
+    for (int rhythm = 0; rhythm < MP7_USER_PATTERN_COUNT; rhythm++) {
+        struct mp7_user_pattern pattern;
+        uint64_t mask;
+
+        if (!mp7_get_default_user_pattern((unsigned int)rhythm, &pattern)) {
+            continue;
+        }
+
+        mask = mp7_timesig_enable_mask(pattern.timesig);
+        for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
+            if ((pattern.notes[column] != 0) &&
+                (((mask >> column) & 1u) == 0u)) {
+                printf("FAIL : the rhythm of slot %d has a hit in column %d,"
+                       " which its meter skips\n", rhythm, column);
+                silent = 1;
+            }
+        }
+    }
+    check(silent == 0,
+          "every hit of a rhythm the machine comes up with is heard");
+
+    /* The row of the 5/4 meter: the mask the engine holds for it is the
+     * row the rhythms of the panel were written on.
+     *
+     *   xxxxxx--xxxxxx--xxxx----xxxx----xxxxxx--xxxxxx--xxxx----xxxx----
+     *
+     * The bar is five beats long, and the runs of the row are the cells of
+     * the groove. */
+    check(mp7_timesig_enable_mask(MP7_TIMESIG_5_4) ==
+              UINT64_C(0x0F0F3F3F0F0F3F3F),
+          "the 5/4 meter plays the row of the panel");
+    check(mp7_timesig_enable_mask(MP7_TIMESIG_6_8) ==
+              mp7_timesig_enable_mask(MP7_TIMESIG_2_4),
+          "the 6/8 meter plays on the compound grid");
+
+    /* The user source plays the rhythm of the slot, the preset source
      * plays the factory rhythm. */
     static int16_t preset[20480];
     static int16_t user[20480];
@@ -145,7 +202,7 @@ int main(void)
     }
 
     check(peak(preset, 20480) > 0, "the preset source plays the factory rhythm");
-    check(peak(user, 20480) == 0, "the user source plays the empty pattern");
+    check(peak(user, 20480) > 0, "the user source plays the rhythm of the slot");
 
     /* A written pattern comes back as it was written. */
     static uint16_t notes[MP7_USER_PATTERN_COLUMNS];

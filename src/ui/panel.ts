@@ -63,6 +63,34 @@ const PANEL_KNOBS = 8;
 const BAND_MEMORY_COUNT = 4;
 
 /**
+ * The settings the knobs of the band come up in, for the memory positions.
+ *
+ * A memory position keeps the settings of the knobs, and a position that
+ * was not written comes up with the settings that belong to it. The first
+ * position comes up with the settings of the advanced mode: a fuller
+ * accent, a snare that is a little louder and shorter, a hi-hat that is
+ * quieter and a little darker, the percussion further back and the
+ * instruments spread wide over the stereo field. The other positions come
+ * up with the settings the machine comes up with.
+ *
+ * The user may write over them: a knob that is turned writes into the
+ * position that is selected, and the settings the position is given are
+ * kept in the browser.
+ */
+const BAND_MEMORY_DEFAULTS: Record<string, number>[] = [
+  {
+    accent: 1.6,
+    'sn1-vol': 1.08,
+    'sn1-decay': 316,
+    'sn1-cutoff': 5500,
+    'hh-vol': 0.71,
+    'hh-cutoff': 8300,
+    'perc-vol': 0.74,
+    spread: 0.59,
+  },
+];
+
+/**
  * The knobs of the band that have a function.
  *
  * Every one of them stands where the engine stands when it comes up, so
@@ -398,7 +426,7 @@ function rhythmShortcutFor(
 }
 
 /**
- * The pattern the engine starts with: a full 64-column grid with every
+ * The pattern of a slot that was cleared: a full 64-column grid with every
  * column enabled and no instrument in it.
  */
 function emptyUserPattern(): UserPattern {
@@ -987,6 +1015,15 @@ export class Panel {
   /** The user patterns are not in the browser until they are saved. */
   private patternsUnsaved = false;
 
+  /**
+   * The slots the user has written in.
+   *
+   * Only these are kept in the browser: a slot that was not written keeps
+   * the rhythm it came up with, so a machine that comes up with new
+   * rhythms gives them to a user who did not touch them.
+   */
+  private readonly changedSlots = new Set<number>();
+
   // The selection the user has just made. The panel shows it right away
   // and hands it over to the engine, which confirms it in the next panel
   // snapshot. The override is dropped once the engine reports the same
@@ -1070,10 +1107,11 @@ export class Panel {
       onMeter: (timesig) => {
         void this.writeTimesig(timesig);
       },
-      onRename: () => {
+      onRename: (rhythm) => {
         // The name of a pattern belongs to the pattern, so it is kept with
         // it: the work is not in the browser until the save button is
         // pressed.
+        this.changedSlots.add(rhythm);
         this.markUnsaved();
       },
       onClear: () => this.clearPattern(),
@@ -1106,8 +1144,10 @@ export class Panel {
     // so the first rhythm is on the card before the first snapshot arrives.
     this.card.update(this.state);
 
-    // The user patterns of the last visit are put back into the engine
-    // before the card reads anything.
+    // The slots of the engine come up with the rhythms of the two banks.
+    // The patterns of the last visit are put back over them, so the work
+    // of the user is used instead of the rhythms that came with the
+    // machine.
     for (const [index, pattern] of loadUserPatterns()) {
       this.userPatterns.set(index, pattern);
       this.engine.setUserPattern(index, pattern);
@@ -1194,16 +1234,21 @@ export class Panel {
     // settings of the knobs by the name of the knob, so a knob that
     // changes its function does not take the settings of the knob that
     // stood there before. A position that was not there at the last visit
-    // comes up with the settings the machine comes up with.
+    // comes up with the settings that belong to it.
     const storedMemories = this.savedControls.memories ?? [];
     const storedMemory = this.savedControls.memory ?? 0;
     this.bandMemory =
       storedMemory >= 0 && storedMemory < BAND_MEMORY_COUNT ? storedMemory : 0;
     for (let index = 0; index < BAND_MEMORY_COUNT; index += 1) {
+      // The settings the position comes up in: the ones that belong to it,
+      // or the ones the machine comes up with.
+      const defaults: Record<string, number> = { ...this.bandDefaults };
+      Object.assign(defaults, BAND_MEMORY_DEFAULTS[index] ?? {});
+
       const position: Record<string, number> = {};
       const stored = storedMemories[index] ?? {};
       for (const id of this.bandIds) {
-        const fallback = this.bandDefaults[id];
+        const fallback = defaults[id];
         if (fallback !== undefined) {
           position[id] = stored[id] ?? fallback;
         }
@@ -1698,7 +1743,7 @@ export class Panel {
     // The extended mode is left behind: a pattern that was written but
     // not saved goes back to the contents the browser holds.
     if (source === PATTERN_SOURCE_PRESET) {
-      this.discardUnsavedPatterns();
+      void this.discardUnsavedPatterns();
       // The factory rhythms are played with the settings the machine comes
       // up with.
       this.applyBandValues(this.bandDefaults);
@@ -2145,6 +2190,7 @@ export class Panel {
       const next: UserPattern = { ...pattern, notes };
       this.userPatterns.set(slot, next);
       this.engine.setUserPattern(slot, next);
+      this.changedSlots.add(slot);
     }
 
     // The card shows the pattern that plays, so it has to read it again.
@@ -2187,6 +2233,7 @@ export class Panel {
       const next: UserPattern = { ...pattern, timesig };
       this.userPatterns.set(slot, next);
       this.engine.setUserPattern(slot, next);
+      this.changedSlots.add(slot);
     }
 
     // The card shows the pattern that plays, so it has to read it again.
@@ -2298,6 +2345,7 @@ export class Panel {
       const next: UserPattern = { ...pattern, notes: [...notes] };
       this.userPatterns.set(slot, next);
       this.engine.setUserPattern(slot, next);
+      this.changedSlots.add(slot);
     }
 
     this.card.invalidate();
@@ -2327,6 +2375,7 @@ export class Panel {
       const next = emptyUserPattern();
       this.userPatterns.set(slot, next);
       this.engine.setUserPattern(slot, next);
+      this.changedSlots.add(slot);
     }
 
     this.card.invalidate();
@@ -2411,6 +2460,7 @@ export class Panel {
       const next = patternFromFile(pattern);
       this.userPatterns.set(slot, next);
       this.engine.setUserPattern(slot, next);
+      this.changedSlots.add(slot);
       names.set(
         slot,
         pattern.name.trim() === '' ? defaultUserName(slot) : pattern.name,
@@ -2432,13 +2482,27 @@ export class Panel {
    * The patterns are written when the save button is pressed and not
    * before: a pattern that is being written is not lost, but it is also
    * not in the browser yet. The names of the patterns are kept with them.
+   *
+   * Only the slots that were written are kept: a slot that was not
+   * touched keeps the rhythm the machine comes up with, and the browser
+   * does not hold a copy of it.
    */
   private savePatterns(): boolean {
     if (this.displayedSource() !== PATTERN_SOURCE_USER) {
       return false;
     }
-    saveUserPatterns(this.userPatterns);
+
+    const saved = loadUserPatterns();
+    for (const slot of this.changedSlots) {
+      const pattern = this.userPatterns.get(slot);
+      if (pattern !== undefined) {
+        saved.set(slot, pattern);
+      }
+    }
+
+    saveUserPatterns(saved);
     this.userNames.save();
+    this.changedSlots.clear();
     this.patternsUnsaved = false;
     this.card.setUnsaved(false);
     this.showStatus('The patterns are kept in the browser', false);
@@ -2457,21 +2521,26 @@ export class Panel {
    *
    * The extended mode is left behind, and the work that was not kept with
    * the save button is gone: a slot that was never saved goes back to the
-   * empty pattern the engine starts with. The names of the patterns go
-   * back with them: a name belongs to the pattern it names.
+   * rhythm the machine comes up with. The names of the patterns go back
+   * with them: a name belongs to the pattern it names.
    */
-  private discardUnsavedPatterns(): void {
+  private async discardUnsavedPatterns(): Promise<void> {
     if (!this.patternsUnsaved) {
       return;
     }
     this.patternsUnsaved = false;
 
     const saved = loadUserPatterns();
-    for (const slot of [...this.userPatterns.keys()]) {
-      const restored = saved.get(slot) ?? emptyUserPattern();
+    for (const slot of this.changedSlots) {
+      const restored =
+        saved.get(slot) ?? (await this.defaultUserPattern(slot));
+      if (restored === null) {
+        continue;
+      }
       this.userPatterns.set(slot, restored);
       this.engine.setUserPattern(slot, restored);
     }
+    this.changedSlots.clear();
 
     // The names go back to the names the browser holds.
     this.userNames.restore();
@@ -2480,6 +2549,24 @@ export class Panel {
     this.card.setUnsaved(false);
     this.card.invalidate();
     this.showStatus('The changes that were not saved are gone', false);
+  }
+
+  /**
+   * The rhythm a user slot comes up with.
+   *
+   * It is the rhythm of the machine and not the pattern in the slot: the
+   * panel puts a slot back the way it came with it.
+   */
+  private async defaultUserPattern(slot: number): Promise<UserPattern | null> {
+    try {
+      return await this.engine.getDefaultUserPattern(slot);
+    } catch (error: unknown) {
+      this.showStatus(
+        error instanceof Error ? error.message : String(error),
+        true,
+      );
+      return null;
+    }
   }
 
   /**

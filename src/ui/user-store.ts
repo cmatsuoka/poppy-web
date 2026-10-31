@@ -4,8 +4,8 @@
  * The engine holds the 20 user pattern slots while the page is open. The
  * patterns the user has written are kept in the browser, so the work is
  * still there after a reload. Only the patterns that were touched are
- * stored: every slot that was never written is still the empty pattern
- * the engine made when it started.
+ * stored: every slot that was never written keeps the rhythm it came up
+ * with, and the browser does not hold a copy of it.
  *
  * A pattern is stored the way the engine holds it: the 64 columns of the
  * cycle, the time signature it plays on and the length of the repeating

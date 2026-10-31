@@ -41,6 +41,7 @@ declare module '*poppy.mjs' {
       period: number,
     ): number;
     _poppy_user_pattern(ctx: number, index: number): number;
+    _poppy_default_user_pattern(index: number): number;
   }
 
   export interface PoppyModuleOptions {

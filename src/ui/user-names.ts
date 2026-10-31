@@ -14,6 +14,8 @@
  * pattern goes back to the name the browser holds with it.
  */
 
+import { ADVANCED_NAMES } from '../audio/protocol';
+
 const STORAGE_KEY = 'poppy-web.user-names.v1';
 
 /** The number of characters a name may have. */
@@ -22,6 +24,18 @@ export const MAX_NAME_LENGTH = 10;
 /** The name a user pattern has until it is given another one. */
 export function defaultUserName(slot: number): string {
   return `USER ${String(slot + 1).padStart(2, '0')}`;
+}
+
+/**
+ * The name the rhythm of a slot comes up with.
+ *
+ * The slots are not empty when the machine comes up: they hold the
+ * rhythms of the two banks, and the name of a rhythm is the name the
+ * machine gives it. A slot without a rhythm of its own has no name of its
+ * own either.
+ */
+export function defaultBankName(slot: number): string | null {
+  return ADVANCED_NAMES[slot] ?? null;
 }
 
 /**
@@ -48,7 +62,7 @@ export class UserNames {
 
   /** The name of a user pattern, the default one if it was never renamed. */
   name(slot: number): string {
-    return this.names.get(slot) ?? defaultUserName(slot);
+    return this.names.get(slot) ?? defaultBankName(slot) ?? defaultUserName(slot);
   }
 
   /**

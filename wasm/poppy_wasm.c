@@ -49,6 +49,10 @@ static int32_t pattern_out[9];
  * buffer, so the JS side reads them from a fixed address. */
 static struct mp7_user_pattern user_out;
 
+/* The rhythm a user slot comes up with. The notes live in this buffer, so
+ * the JS side reads them from a fixed address. */
+static struct mp7_user_pattern default_out;
+
 /* The mask of the compound grid: the mask of the 2/4 and of the 6/8. A
  * pattern that carries it plays on the compound grid. */
 static uint64_t compound_mask(void)
@@ -220,30 +224,59 @@ WASM_EXPORT int32_t poppy_get_pattern_source(const void *ctx)
 }
 
 /*
- * Fill every user slot with an empty pattern.
+ * Fill every user slot with the rhythm the machine comes up with.
  *
- * A user pattern starts blank: the user writes it, step by step, with the
- * write strip. The grid is a full 64-column loop with every column enabled
- * and no instrument in it, so the strip can write all four bars of the
- * cycle. A copy of a factory rhythm would be a pattern the user never
- * wrote, and it would carry the shared Tambourine/Guiro/Quijada layer that
- * the user source never adds on its own.
+ * The slots are not empty when the machine comes up: they hold the
+ * rhythms of the two banks, the ten of bank A and the ten of bank B. They
+ * are the rhythms the machine was given, and the user writes over them: a
+ * slot that was written keeps what was written in it, and a slot that was
+ * not written goes back to the rhythm that came with the machine.
  *
- * The pattern is in 4/4, the signature that enables every column.
+ * The rhythms are the engine's own, so the panel never has to carry them.
  */
 WASM_EXPORT void poppy_seed_user_patterns(void *ctx)
 {
     unsigned int rhythm;
 
-    for (rhythm = 0u; rhythm < (unsigned int)MP7_RHYTHM_COUNT; rhythm++) {
+    for (rhythm = 0u; rhythm < (unsigned int)MP7_USER_PATTERN_COUNT; rhythm++) {
         struct mp7_user_pattern pattern;
 
-        memset(&pattern, 0, sizeof(pattern));
-        pattern.timesig = MP7_TIMESIG_4_4;
-        pattern.notes_period = (uint8_t)MP7_USER_PATTERN_COLUMNS;
+        if (!mp7_get_default_user_pattern(rhythm, &pattern)) {
+            continue;
+        }
 
         mp7_set_user_pattern(ctx, rhythm, &pattern);
     }
+}
+
+/*
+ * The rhythm a user slot comes up with.
+ *
+ * It is the rhythm of the machine and not the pattern in the slot: the
+ * panel asks for it to put a slot back the way it came, and the pattern
+ * that was written in the slot does not change it.
+ */
+WASM_EXPORT int32_t *poppy_default_user_pattern(int32_t index)
+{
+    uint64_t mask;
+
+    if (!mp7_get_default_user_pattern((unsigned int)index, &default_out)) {
+        pattern_out[8] = 0;
+        return pattern_out;
+    }
+
+    mask = mp7_timesig_enable_mask(default_out.timesig);
+
+    pattern_out[0] = (int32_t)(uintptr_t)default_out.notes;
+    pattern_out[1] = 0;
+    pattern_out[2] = (int32_t)(uint32_t)mask;
+    pattern_out[3] = (int32_t)(uint32_t)(mask >> 32);
+    pattern_out[4] = default_out.notes_period;
+    pattern_out[5] = 0;
+    pattern_out[6] = default_out.timesig;
+    pattern_out[7] = (mask == compound_mask()) ? 1 : 0;
+    pattern_out[8] = 1;
+    return pattern_out;
 }
 
 /* Copy a pattern into a user slot. The notes are read from the wasm heap.

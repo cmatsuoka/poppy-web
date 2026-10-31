@@ -86,6 +86,11 @@ export class PoppyEngine {
     { resolve: (pattern: UserPattern) => void; reject: (reason: Error) => void }
   >();
   private userPatternPending = new Map<number, Promise<UserPattern>>();
+  private defaultUserPatternRequests = new Map<
+    number,
+    { resolve: (pattern: UserPattern) => void; reject: (reason: Error) => void }
+  >();
+  private defaultUserPatternPending = new Map<number, Promise<UserPattern>>();
   // A missing worklet is not something a retry can fix, so the failure is
   // latched and the engine stops trying to build a node.
   private fatal: Error | null = null;
@@ -319,6 +324,37 @@ export class PoppyEngine {
     return request;
   }
 
+  /**
+   * Read the rhythm a user slot comes up with.
+   *
+   * It is the rhythm of the machine and not the pattern in the slot: the
+   * pattern that was written in the slot does not change it, so the panel
+   * can always put a slot back the way it came.
+   */
+  getDefaultUserPattern(index: number): Promise<UserPattern> {
+    const inflight = this.defaultUserPatternPending.get(index);
+    if (inflight !== undefined) {
+      return inflight;
+    }
+
+    const request = new Promise<UserPattern>((resolve, reject) => {
+      this.defaultUserPatternRequests.set(index, { resolve, reject });
+      this.post({ type: 'defaultUserPatternRequest', index });
+      this.wake();
+    })
+      .then((pattern) => {
+        this.defaultUserPatternPending.delete(index);
+        return pattern;
+      })
+      .catch((error: unknown) => {
+        this.defaultUserPatternPending.delete(index);
+        throw error;
+      });
+
+    this.defaultUserPatternPending.set(index, request);
+    return request;
+  }
+
   /** Write a user pattern into a slot of the engine. */
   setUserPattern(index: number, pattern: UserPattern): void {
     this.post({ type: 'userPattern', index, pattern });
@@ -522,6 +558,14 @@ export class PoppyEngine {
         }
         break;
       }
+      case 'defaultUserPattern': {
+        const handlers = this.defaultUserPatternRequests.get(event.index);
+        if (handlers !== undefined) {
+          this.defaultUserPatternRequests.delete(event.index);
+          handlers.resolve(event.pattern);
+        }
+        break;
+      }
       case 'error': {
         this.emitError(event.message);
         this.rejectAllPatternRequests(new Error(event.message));
@@ -545,5 +589,9 @@ export class PoppyEngine {
       handlers.reject(reason);
     }
     this.userPatternRequests.clear();
+    for (const handlers of this.defaultUserPatternRequests.values()) {
+      handlers.reject(reason);
+    }
+    this.defaultUserPatternRequests.clear();
   }
 }
