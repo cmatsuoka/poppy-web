@@ -37,10 +37,8 @@ declare module '*poppy.mjs' {
       ctx: number,
       index: number,
       notesPtr: number,
-      enableLo: number,
-      enableHi: number,
+      timesig: number,
       period: number,
-      triplet: number,
     ): number;
     _poppy_user_pattern(ctx: number, index: number): number;
   }

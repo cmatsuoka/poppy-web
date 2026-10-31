@@ -8,25 +8,30 @@
  * The format is JSON: it is easy to read, easy to write and easy to check.
  * A rhythm is written the way the engine holds it: the 64 steps of the
  * cycle, each of them a bit for every voice of the machine and a bit for
- * the accent, and the steps the engine plays, which are a 64-bit value.
- * The file says what it is and which version of the format it uses, so a
- * file of another program or of another version is refused instead of being
- * half read.
+ * the accent, and the time signature the pattern plays on. The mask of the
+ * steps the machine plays is not in the file: the engine derives it from
+ * the signature. The file says what it is and which version of the format
+ * it uses, so a file of another program or of another version is refused
+ * instead of being half read.
  */
 
-import { PATTERN_COLUMNS, type Bank, type UserPattern } from '../audio/protocol';
+import {
+  PATTERN_COLUMNS,
+  TIMESIG,
+  labelOfTimesig,
+  timesigOfLabel,
+  type Bank,
+  type UserPattern,
+} from '../audio/protocol';
 
 /** The name the format carries in every file. */
 export const BANK_FILE_FORMAT = 'poppy-web.bank';
 
 /** The version of the format this build reads and writes. */
-export const BANK_FILE_VERSION = 4;
+export const BANK_FILE_VERSION = 5;
 
 /** The number of rhythms a bank holds. */
 export const BANK_PATTERN_COUNT = 10;
-
-/** Every step of the cycle is played. */
-const ALL_STEPS = (1n << BigInt(PATTERN_COLUMNS)) - 1n;
 
 /** One rhythm of a bank, as it is written in the file. */
 export interface BankFilePattern {
@@ -41,18 +46,14 @@ export interface BankFilePattern {
    */
   steps: number[];
   /**
-   * The steps the engine plays, as a 64-bit value.
+   * The time signature of the pattern, as the card prints it.
    *
-   * A bit is set for every step the engine plays and clear for every step
-   * it skips. The first step of the cycle is the lowest bit and the last
-   * one the highest, the way the engine numbers the columns, so the value
-   * reads like the cycle itself.
+   * It is the meter of the pattern: the engine derives the steps it plays
+   * from it, so the file does not carry a mask of its own.
    */
-  enable: string;
+  meter: string;
   /** The length of the repeating part of the cycle. */
   period: number;
-  /** Whether the rhythm is played as a triplet. */
-  triplet: boolean;
 }
 
 /** A whole bank of rhythms, as it is written in the file. */
@@ -82,46 +83,6 @@ export function buildBankFile(
   };
 }
 
-/**
- * The steps the engine plays, as a 64-bit value.
- *
- * The engine holds the mask in two words: the low one carries the first
- * thirty-two columns of the cycle and the high one the other thirty-two.
- */
-function enableValue(pattern: UserPattern): bigint {
-  const lo = BigInt(pattern.enableLo >>> 0);
-  const hi = BigInt(pattern.enableHi >>> 0);
-  return (hi << 32n) | lo;
-}
-
-/**
- * The printed form of a 64-bit value.
- *
- * The value is written the way it is written in C: a "0x" and the digits of
- * the number, padded to the sixteen digits of the cycle.
- */
-function formatEnable(value: bigint): string {
-  return `0x${value.toString(16).padStart(16, '0')}`;
-}
-
-/**
- * Read a 64-bit value out of its printed form.
- *
- * The "0x" is optional and the digits may be written in either case. A
- * text that is not a 64-bit number is nothing.
- */
-function parseEnable(text: string): bigint | null {
-  const trimmed = text.trim();
-  const digits =
-    trimmed.startsWith('0x') || trimmed.startsWith('0X')
-      ? trimmed.slice(2)
-      : trimmed;
-  if (!/^[0-9a-fA-F]{1,16}$/.test(digits)) {
-    return null;
-  }
-  return BigInt(`0x${digits}`);
-}
-
 /** Write a pattern of the engine as the steps of a file. */
 export function patternToFile(
   pattern: UserPattern,
@@ -130,24 +91,21 @@ export function patternToFile(
   return {
     name,
     steps: pattern.notes.map((note) => (note ?? 0) & 0xffff),
-    enable: formatEnable(enableValue(pattern)),
+    meter: labelOfTimesig(pattern.timesig),
     period: pattern.period,
-    triplet: pattern.triplet,
   };
 }
 
 /** Read a rhythm of a file back as a pattern of the engine. */
 export function patternFromFile(pattern: BankFilePattern): UserPattern {
-  // The file has been checked before it gets here, so the value is a
-  // 64-bit number.
-  const enable = parseEnable(pattern.enable) ?? ALL_STEPS;
+  // The file has been checked before it gets here, so the meter is one
+  // the engine knows.
+  const timesig = timesigOfLabel(pattern.meter) ?? TIMESIG['4/4'];
 
   return {
     notes: pattern.steps.map((step) => step & 0xffff),
-    enableLo: Number(enable & 0xffffffffn) >>> 0,
-    enableHi: Number((enable >> 32n) & 0xffffffffn) >>> 0,
+    timesig,
     period: pattern.period,
-    triplet: pattern.triplet,
   };
 }
 
@@ -195,16 +153,13 @@ function isBankFilePattern(value: unknown): value is BankFilePattern {
   if (!pattern.steps.every(isStep)) {
     return false;
   }
-  if (typeof pattern.enable !== 'string') {
+  if (typeof pattern.meter !== 'string') {
     return false;
   }
-  if (parseEnable(pattern.enable) === null) {
+  if (timesigOfLabel(pattern.meter) === null) {
     return false;
   }
-  if (!isPeriod(pattern.period)) {
-    return false;
-  }
-  return typeof pattern.triplet === 'boolean';
+  return isPeriod(pattern.period);
 }
 
 /**
@@ -257,9 +212,8 @@ export function parseBankFile(text: string): BankFile {
     patterns: file.patterns.map((pattern) => ({
       name: pattern.name,
       steps: [...pattern.steps],
-      enable: formatEnable(parseEnable(pattern.enable) ?? ALL_STEPS),
+      meter: pattern.meter,
       period: pattern.period,
-      triplet: pattern.triplet,
     })),
   };
 }

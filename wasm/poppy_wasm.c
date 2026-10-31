@@ -9,6 +9,13 @@
  * pattern slots and the switch that points the sequencer at them. The
  * panel's extended mode writes the user patterns through this file and
  * reads them back the same way.
+ *
+ * A pattern names its time signature, and the engine derives the mask of
+ * the steps it plays from it. The glue hands the signature to the panel
+ * and the mask the engine derived from it, so the panel never has to know
+ * the masks of the library. The mask also decides the grid the pattern
+ * plays on: the compound mask - the mask of the 2/4 and of the 6/8 - plays
+ * on the compound grid, every other mask plays straight.
  */
 
 #include <emscripten/emscripten.h>
@@ -29,18 +36,42 @@
  * column, flash_count, pattern_source. */
 static int32_t panel_out[9];
 
-/* int32[8]: notes_ptr, percussion_ptr, enable_lo, enable_hi, notes_period,
- * percussion_period, triplet, valid. Offsets are byte addresses into wasm
- * memory; read notes/percussion through HEAPU16 at offset >> 1. */
-static int32_t pattern_out[8];
-
-/* The same layout for a user pattern. It has an array of its own, so a
- * factory pattern and a user pattern can be read at the same time. */
-static int32_t user_pattern_out[8];
+/* int32[9]: notes_ptr, percussion_ptr, enable_lo, enable_hi, notes_period,
+ * percussion_period, timesig, compound, valid. Offsets are byte addresses
+ * into wasm memory; read notes/percussion through HEAPU16 at offset >> 1.
+ *
+ * The same layout for a factory pattern and for a user pattern. A user
+ * pattern has no shared percussion layer, so its percussion pointer stays
+ * empty. */
+static int32_t pattern_out[9];
 
 /* The user pattern the engine copied out of a slot. The notes live in this
  * buffer, so the JS side reads them from a fixed address. */
 static struct mp7_user_pattern user_out;
+
+/* The mask of the compound grid: the mask of the 2/4 and of the 6/8. A
+ * pattern that carries it plays on the compound grid. */
+static uint64_t compound_mask(void)
+{
+    return mp7_timesig_enable_mask(MP7_TIMESIG_2_4);
+}
+
+/* The time signature a mask belongs to, or -1 when it belongs to none.
+ *
+ * The masks of the signatures are the only masks the library hands out, so
+ * a mask that is not one of them does not name a signature. */
+static int32_t timesig_of_mask(uint64_t mask)
+{
+    int32_t timesig;
+
+    for (timesig = 0; timesig < (int32_t)MP7_TIMESIG_COUNT; timesig++) {
+        if (mp7_timesig_enable_mask((mp7_timesig)timesig) == mask) {
+            return timesig;
+        }
+    }
+
+    return -1;
+}
 
 WASM_EXPORT uint32_t poppy_version(void)
 {
@@ -129,7 +160,7 @@ WASM_EXPORT int32_t poppy_set_voice_param(void *ctx,
                : 0;
 }
 
-/* The gain an accented column of a user pattern is played at, Q16. */
+/* The gain an accented column is played at, Q16. */
 WASM_EXPORT void poppy_set_accent_gain(void *ctx, int32_t q16)
 {
     mp7_set_accent_gain(ctx, q16);
@@ -160,7 +191,7 @@ WASM_EXPORT int32_t *poppy_factory_pattern(int32_t rhythm)
 
     mp7_get_factory_pattern((mp7_rhythm)rhythm, &v);
     if (v.notes == NULL || v.percussion == NULL) {
-        pattern_out[7] = 0;
+        pattern_out[8] = 0;
         return pattern_out;
     }
 
@@ -170,8 +201,9 @@ WASM_EXPORT int32_t *poppy_factory_pattern(int32_t rhythm)
     pattern_out[3] = (int32_t)(uint32_t)(v.enable >> 32);
     pattern_out[4] = (int32_t)v.notes_period;
     pattern_out[5] = (int32_t)v.percussion_period;
-    pattern_out[6] = v.triplet ? 1 : 0;
-    pattern_out[7] = 1;
+    pattern_out[6] = timesig_of_mask(v.enable);
+    pattern_out[7] = (v.enable == compound_mask()) ? 1 : 0;
+    pattern_out[8] = 1;
     return pattern_out;
 }
 
@@ -196,6 +228,8 @@ WASM_EXPORT int32_t poppy_get_pattern_source(const void *ctx)
  * cycle. A copy of a factory rhythm would be a pattern the user never
  * wrote, and it would carry the shared Tambourine/Guiro/Quijada layer that
  * the user source never adds on its own.
+ *
+ * The pattern is in 4/4, the signature that enables every column.
  */
 WASM_EXPORT void poppy_seed_user_patterns(void *ctx)
 {
@@ -205,28 +239,32 @@ WASM_EXPORT void poppy_seed_user_patterns(void *ctx)
         struct mp7_user_pattern pattern;
 
         memset(&pattern, 0, sizeof(pattern));
-        pattern.enable = ~(uint64_t)0;
+        pattern.timesig = MP7_TIMESIG_4_4;
         pattern.notes_period = (uint8_t)MP7_USER_PATTERN_COLUMNS;
-        pattern.triplet = false;
 
         mp7_set_user_pattern(ctx, rhythm, &pattern);
     }
 }
 
-/* Copy a pattern into a user slot. The notes are read from the wasm heap. */
+/* Copy a pattern into a user slot. The notes are read from the wasm heap.
+ *
+ * The pattern names its time signature, and the engine derives the mask of
+ * the steps it plays from it. A signature the engine does not know is
+ * refused, and the slot is left alone. */
 WASM_EXPORT int32_t poppy_set_user_pattern(void *ctx,
                                             int32_t index,
                                             int32_t notes_ptr,
-                                            int32_t enable_lo,
-                                            int32_t enable_hi,
-                                            int32_t period,
-                                            int32_t triplet)
+                                            int32_t timesig,
+                                            int32_t period)
 {
     struct mp7_user_pattern pattern;
     const uint16_t *notes = (const uint16_t *)(uintptr_t)notes_ptr;
     unsigned int column;
 
     if (notes == NULL) {
+        return 0;
+    }
+    if ((unsigned int)timesig >= (unsigned int)MP7_TIMESIG_COUNT) {
         return 0;
     }
 
@@ -236,10 +274,8 @@ WASM_EXPORT int32_t poppy_set_user_pattern(void *ctx,
         pattern.notes[column] = notes[column];
     }
 
-    pattern.enable = ((uint64_t)(uint32_t)enable_hi << 32) |
-                     (uint64_t)(uint32_t)enable_lo;
+    pattern.timesig = (mp7_timesig)timesig;
     pattern.notes_period = (uint8_t)period;
-    pattern.triplet = (triplet != 0);
 
     return mp7_set_user_pattern(ctx, (unsigned int)index, &pattern) ? 1 : 0;
 }
@@ -247,26 +283,35 @@ WASM_EXPORT int32_t poppy_set_user_pattern(void *ctx,
 /*
  * Read a user slot back.
  *
+ * The mask the panel prints is the one the engine derived from the
+ * signature of the slot, and the signature itself is handed along, so the
+ * panel can name the meter of the pattern.
+ *
  * A user pattern carries its own percussion lines, so the view has no
  * shared percussion layer: the second pointer stays empty and the card
  * does not add one.
  */
 WASM_EXPORT int32_t *poppy_user_pattern(const void *ctx, int32_t index)
 {
+    uint64_t mask;
+
     if (!mp7_get_user_pattern(ctx, (unsigned int)index, &user_out)) {
-        user_pattern_out[7] = 0;
-        return user_pattern_out;
+        pattern_out[8] = 0;
+        return pattern_out;
     }
 
-    user_pattern_out[0] = (int32_t)(uintptr_t)user_out.notes;
-    user_pattern_out[1] = 0;
-    user_pattern_out[2] = (int32_t)(uint32_t)user_out.enable;
-    user_pattern_out[3] = (int32_t)(uint32_t)(user_out.enable >> 32);
-    user_pattern_out[4] = (int32_t)user_out.notes_period;
-    user_pattern_out[5] = 0;
-    user_pattern_out[6] = user_out.triplet ? 1 : 0;
-    user_pattern_out[7] = 1;
-    return user_pattern_out;
+    mask = mp7_timesig_enable_mask(user_out.timesig);
+
+    pattern_out[0] = (int32_t)(uintptr_t)user_out.notes;
+    pattern_out[1] = 0;
+    pattern_out[2] = (int32_t)(uint32_t)mask;
+    pattern_out[3] = (int32_t)(uint32_t)(mask >> 32);
+    pattern_out[4] = (int32_t)user_out.notes_period;
+    pattern_out[5] = 0;
+    pattern_out[6] = (int32_t)user_out.timesig;
+    pattern_out[7] = (mask == compound_mask()) ? 1 : 0;
+    pattern_out[8] = 1;
+    return pattern_out;
 }
 
 /*

@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 #
-# Fetch the pinned upstream engine and build the wasm glue.
+# Fetch the engine and build the wasm glue.
 #
-# The upstream checkout lives in vendor/libpoppy and is never committed.
-# Update LIBPOPPY_COMMIT deliberately: the API is still moving.
+# The engine is libpoppy. Its sources are taken from LIBPOPPY_SOURCE and
+# copied into LIBPOPPY_DIR, where the local patches are applied. The
+# source tree is never written to: it may be a checkout that belongs to
+# somebody else.
+#
+# The source is the sibling checkout of the library when there is one
+# (../minipops), because it carries the newest API. Otherwise the pinned
+# commit is fetched into vendor/libpoppy-src. Update LIBPOPPY_COMMIT
+# deliberately: the API is still moving.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPPY_REPO="${LIBPOPPY_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
-LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-a901b18492f38ad1ffe9158d2d11b6e2fb9fbab0}"
+LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-2b929a867f2c943d1efe12e9d59d658e8175435a}"
+# The checkout of the library that carries the newest API.
+LIBPOPPY_SIBLING="${LIBPOPPY_SIBLING:-$ROOT/../minipops}"
+# The pristine sources the build is made from.
+LIBPOPPY_SOURCE="${LIBPOPPY_SOURCE:-}"
+# The sources the build actually compiles: a copy of the sources above with
+# the local patches applied.
 LIBPOPPY_DIR="${LIBPOPPY_DIR:-$ROOT/vendor/libpoppy}"
 EMCC="${EMCC:-emcc}"
 OUT_DIR="$ROOT/build"
@@ -27,38 +40,93 @@ EOF
     exit 1
 fi
 
-if [ ! -d "$LIBPOPPY_DIR/.git" ]; then
-    mkdir -p "$(dirname "$LIBPOPPY_DIR")"
-    git clone "$LIBPOPPY_REPO" "$LIBPOPPY_DIR"
+# Where the pristine sources come from.
+if [ -z "$LIBPOPPY_SOURCE" ]; then
+    if [ -f "$LIBPOPPY_SIBLING/include/mp7.h" ]; then
+        # The sibling checkout is the working copy of the library, and it
+        # carries the API this panel is written against.
+        LIBPOPPY_SOURCE="$LIBPOPPY_SIBLING"
+    else
+        LIBPOPPY_SOURCE="$ROOT/vendor/libpoppy-src"
+    fi
 fi
 
-git -C "$LIBPOPPY_DIR" fetch --depth 1 origin "$LIBPOPPY_COMMIT"
-# The checkout is forced: the tree carries the local patches below, and a
-# pinned commit that moves on would otherwise run into them.
-git -C "$LIBPOPPY_DIR" checkout --force --detach "$LIBPOPPY_COMMIT"
+if [ ! -f "$LIBPOPPY_SOURCE/include/mp7.h" ]; then
+    # No local checkout: fetch the pinned commit.
+    if [ ! -d "$LIBPOPPY_SOURCE/.git" ]; then
+        mkdir -p "$(dirname "$LIBPOPPY_SOURCE")"
+        git clone "$LIBPOPPY_REPO" "$LIBPOPPY_SOURCE"
+    fi
 
-# The local patches. They are applied to the fetched checkout, so every
-# machine builds the same engine. A patch that does not apply is an error:
-# it has to be rebased on the pinned commit first.
+    if ! git -C "$LIBPOPPY_SOURCE" fetch --depth 1 origin "$LIBPOPPY_COMMIT"; then
+        cat >&2 <<EOF
+error: the pinned engine commit could not be fetched.
+
+  $LIBPOPPY_COMMIT
+
+The commit has to be in the upstream repository:
+
+  git -C $LIBPOPPY_SOURCE fetch origin $LIBPOPPY_COMMIT
+
+A local checkout of the library can be used instead:
+
+  LIBPOPPY_SOURCE=/path/to/libpoppy npm run build:wasm
+EOF
+        exit 1
+    fi
+    # The checkout is forced: the tree carries the local patches below, and
+    # a pinned commit that moves on would otherwise run into them.
+    git -C "$LIBPOPPY_SOURCE" checkout --force --detach "$LIBPOPPY_COMMIT"
+fi
+
+if [ ! -d "$LIBPOPPY_SOURCE/src" ]; then
+    echo "error: the library sources are missing: $LIBPOPPY_SOURCE" >&2
+    exit 1
+fi
+
+# The build compiles a copy of the sources, so the checkout the sources
+# come from stays untouched.
+rm -rf "$LIBPOPPY_DIR"
+mkdir -p "$LIBPOPPY_DIR"
+cp -R "$LIBPOPPY_SOURCE/include" "$LIBPOPPY_DIR/include"
+cp -R "$LIBPOPPY_SOURCE/src" "$LIBPOPPY_DIR/src"
+if [ -f "$LIBPOPPY_SOURCE/LICENSE" ]; then
+    cp "$LIBPOPPY_SOURCE/LICENSE" "$LIBPOPPY_DIR/LICENSE"
+fi
+
+# The copy is a repository of its own, so the patches can be applied with
+# git: git apply is strict about the context of a hunk, so a patch that
+# does not fit the engine is an error and not a silent change.
+(
+    cd "$LIBPOPPY_DIR"
+    git init -q .
+    git add -A
+    git -c user.email=build@poppy-web -c user.name=poppy-web \
+        commit -q -m "the engine sources, as they were fetched"
+)
+
+# The local patches. They are applied to the copy above, so every machine
+# builds the same engine. A patch that does not apply is an error: it has
+# to be rebased on the pinned commit first.
 PATCH_DIR="$ROOT/patches"
 if [ -d "$PATCH_DIR" ]; then
     for patch in "$PATCH_DIR"/*.patch; do
         [ -e "$patch" ] || continue
         name="$(basename "$patch")"
-        if ! git -C "$LIBPOPPY_DIR" apply --check "$patch" >/dev/null 2>&1; then
+        if ! git -C "$LIBPOPPY_DIR" apply -p1 --check "$patch" >/dev/null 2>&1; then
             echo "error: the patch does not apply to the pinned engine: $name" >&2
             echo "       rebase it on $LIBPOPPY_COMMIT and try again" >&2
             exit 1
         fi
-        git -C "$LIBPOPPY_DIR" apply "$patch"
+        git -C "$LIBPOPPY_DIR" apply -p1 "$patch"
         echo "applied $name"
     done
 fi
 
 mkdir -p "$OUT_DIR"
 
-# The version of the engine that was just checked out, so the panel can
-# name the library it is running.
+# The version of the engine that was just taken, so the panel can name the
+# library it is running.
 VERSION_HEADER="$LIBPOPPY_DIR/include/mp7.h"
 
 read_version() {

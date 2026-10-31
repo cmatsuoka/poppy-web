@@ -5,16 +5,18 @@
  * playing. The note data comes from the engine: the worklet reads it with
  * `mp7_get_factory_pattern()` and the main thread combines the selected
  * rhythms the same way the C engine does when it merges a selection - the
- * note masks are OR-ed, the enable masks are AND-ed and the triplet flags
- * are OR-ed. The shared Tambourine/Guiro/Quijada layer belongs to every
- * rhythm, so it is added on top of the selection.
+ * note masks are OR-ed, the enable masks are AND-ed and the grid of the
+ * selection is the compound one as soon as one of the patterns plays on
+ * it. The shared Tambourine/Guiro/Quijada layer belongs to every rhythm,
+ * so it is added on top of the selection.
  *
  * The playhead follows the column the engine reports in its panel snapshots.
  * The card advances the cursor on its own clock, using the engine's timing
- * rules: a column lasts three sub-steps, four for the shuffle rhythms, and a
- * disabled column is skipped without taking any time. The cursor glides into
- * the next column just before the boundary, so it is already on the column
- * when the engine fires its hits.
+ * rules: a column lasts a fraction of a beat - eight columns to the beat
+ * on the straight grid and six on the compound one - and a disabled column
+ * is skipped without taking any time. The cursor glides into the next
+ * column just before the boundary, so it is already on the column when the
+ * engine fires its hits.
  *
  * With `prefers-reduced-motion` the cursor jumps straight to the reported
  * column instead of gliding.
@@ -25,9 +27,10 @@
  * notes. A run is therefore drawn as a bar with a dot at each end.
  *
  * The extended mode turns the card into an editor of the user patterns:
- * the name of the pattern is written on the card, and the accent row at the
- * bottom of the grid marks the steps the engine plays louder. The accent
- * row is drawn in red, the colour of the bank B names.
+ * the name of the pattern is written on the card, the accent row at the
+ * bottom of the grid marks the steps the engine plays louder and the
+ * meter of the pattern is picked in the foot of the card. The accent row
+ * is drawn in red, the colour of the bank B names.
  */
 
 import type { PoppyEngine } from '../audio/engine';
@@ -42,13 +45,13 @@ import {
   type PanelState,
   type PatternSource,
   type PatternView,
+  type TimeSignature,
 } from '../audio/protocol';
 import {
-  ALL_STEPS,
-  CUSTOM_METER,
   DEFAULT_METER,
   METERS,
-  meterForMask,
+  MIXED_METER,
+  meterOfTimesig,
 } from './meter';
 import { MAX_NAME_LENGTH, type UserNames } from './user-names';
 
@@ -58,7 +61,8 @@ const LABEL_WIDTH = 74;
 const ROW_HEIGHT = 14;
 const HIT_RADIUS = 3.1;
 const PLAYHEAD_WIDTH = 2;
-const ENABLE_ALL = ALL_STEPS;
+/** Every column of the cycle is played. */
+const ENABLE_ALL = (1n << BigInt(PATTERN_COLUMNS)) - 1n;
 const FALLBACK_SAMPLE_RATE = 48000;
 // The Tambourine, Guiro and Quijada are the three Additional Volume voices.
 const PERCUSSION_INSTRUMENT = 12;
@@ -72,7 +76,12 @@ interface CardPattern {
   rhythms: number[];
   notes: number[];
   enable: bigint;
-  triplet: boolean;
+  /** The grid the pattern plays on: the compound one or the straight one. */
+  compound: boolean;
+  /** The time signature of the selection, or -1 when it has none. */
+  timesig: number;
+  /** The selection carries more than one time signature. */
+  mixed: boolean;
   /** The instruments the card prints: the ones that play, or all of them. */
   rows: number[];
   /** The instruments that play. */
@@ -103,9 +112,10 @@ export interface PatternGridOptions {
   onToggle?: (instrument: number, column: number, on: boolean) => void;
   /**
    * Called when a meter is picked for the pattern of the selection. The
-   * panel writes the mask of the meter into the user patterns it shows.
+   * panel writes the time signature of the meter into the user patterns it
+   * shows.
    */
-  onMeter?: (meter: string) => void;
+  onMeter?: (timesig: TimeSignature) => void;
   /**
    * Called when the name of a user pattern is written on the card. The
    * panel marks the work as not saved: a name belongs to the pattern it
@@ -192,7 +202,7 @@ export class PatternGrid {
   private readonly onToggle:
     | ((instrument: number, column: number, on: boolean) => void)
     | null;
-  private readonly onMeter: ((meter: string) => void) | null;
+  private readonly onMeter: ((timesig: TimeSignature) => void) | null;
   private readonly onRename: ((rhythm: number) => void) | null;
   private readonly onClear: ToolAction | null;
   private readonly onCopy: ToolAction | null;
@@ -227,13 +237,14 @@ export class PatternGrid {
   private nameSignature = '';
 
   /**
-   * The option of a mask that belongs to no meter.
+   * The option of a selection that carries more than one meter.
    *
-   * A pattern that was written by hand, or that came from a file, may
-   * carry a mask of its own. The control says so instead of pretending
-   * the pattern is in one of the meters.
+   * The patterns of a selection usually carry the same meter, because a
+   * meter that is picked is written into every pattern that is latched.
+   * A selection of patterns with different meters is only possible when
+   * they came from a file, and the control says so.
    */
-  private customOption: HTMLOptionElement | null = null;
+  private mixedOption: HTMLOptionElement | null = null;
 
   /**
    * Whether the card prints the voices that are still empty.
@@ -371,7 +382,10 @@ export class PatternGrid {
     this.meterSelect.title =
       'The meter of the pattern: the steps outside the bar are skipped by the machine';
     this.meterSelect.addEventListener('change', () => {
-      this.onMeter?.(this.meterSelect.value);
+      const meter = METERS.find((entry) => entry.label === this.meterSelect.value);
+      if (meter !== undefined) {
+        this.onMeter?.(meter.timesig);
+      }
     });
     this.meterBox.append(meterLabel, this.meterSelect);
 
@@ -666,7 +680,9 @@ export class PatternGrid {
     const notes: number[] = new Array<number>(PATTERN_COLUMNS).fill(0);
     const accents: boolean[] = new Array<boolean>(PATTERN_COLUMNS).fill(false);
     let enable = ENABLE_ALL;
-    let triplet = false;
+    let compound = false;
+    let timesig = -1;
+    let mixed = false;
 
     for (const view of views) {
       const period = view.notesPeriod;
@@ -683,7 +699,16 @@ export class PatternGrid {
       const mask =
         (BigInt(view.enableHi >>> 0) << 32n) | BigInt(view.enableLo >>> 0);
       enable &= mask;
-      triplet = triplet || view.triplet;
+      // The grid of the selection is the compound one as soon as one of
+      // the patterns plays on it, the way the engine combines them.
+      compound = compound || view.compound;
+      if (view.timesig >= 0) {
+        if (timesig < 0) {
+          timesig = view.timesig;
+        } else if (timesig !== view.timesig) {
+          mixed = true;
+        }
+      }
     }
 
     // The shared percussion layer plays with every rhythm.
@@ -713,7 +738,9 @@ export class PatternGrid {
       rhythms: [...this.applied],
       notes,
       enable,
-      triplet,
+      compound,
+      timesig,
+      mixed,
       rows,
       voices,
       accents,
@@ -1078,35 +1105,43 @@ export class PatternGrid {
   /**
    * The meter of the pattern the card shows.
    *
-   * The mask of the pattern says which meter it is, because the meters
-   * are the masks the editor writes. A pattern that came from a file may
-   * carry a mask of its own, and then the control says so.
+   * The meter is the time signature the pattern carries, and the card
+   * shows the meter of the whole selection: the patterns of a selection
+   * carry the same meter, because a meter that is picked is written into
+   * every pattern that is latched. A selection that carries more than one
+   * says so.
    */
   private syncMeter(): void {
-    const mask = this.pattern?.enable ?? ENABLE_ALL;
-    const preferred = this.meterSelect.value;
-    const meter = meterForMask(mask, preferred);
-    this.showCustomOption(meter === null);
-    const value = meter?.label ?? CUSTOM_METER;
-    if (this.meterSelect.value !== value) {
-      this.meterSelect.value = value;
+    const pattern = this.pattern;
+    const mixed = pattern?.mixed === true;
+    const meter = pattern === null ? null : meterOfTimesig(pattern.timesig);
+    const label = mixed ? MIXED_METER : (meter?.label ?? DEFAULT_METER);
+
+    // The option of a mixed selection comes first, so that the control can
+    // show it.
+    this.showMixedOption(mixed);
+    if (this.meterSelect.value !== label) {
+      this.meterSelect.value = label;
     }
   }
 
-  /** The option of a mask that belongs to no meter. */
-  private showCustomOption(show: boolean): void {
-    if (show && this.customOption === null) {
+  /** The option of a selection that carries more than one meter. */
+  private showMixedOption(show: boolean): void {
+    if (show && this.mixedOption === null) {
       const option = document.createElement('option');
-      option.value = CUSTOM_METER;
-      option.textContent = 'Custom';
-      option.title = 'The pattern skips steps of its own';
-      this.customOption = option;
+      option.value = MIXED_METER;
+      option.textContent = 'Mixed';
+      option.title = 'The patterns of the selection carry different meters';
+      // The option says what the selection is; it is not a meter that can
+      // be picked.
+      option.disabled = true;
+      this.mixedOption = option;
       this.meterSelect.append(option);
       return;
     }
-    if (!show && this.customOption !== null) {
-      this.customOption.remove();
-      this.customOption = null;
+    if (!show && this.mixedOption !== null) {
+      this.mixedOption.remove();
+      this.mixedOption = null;
     }
   }
 
@@ -1471,23 +1506,32 @@ export class PatternGrid {
       user.textContent = 'USER';
       this.metaRow.append(user);
 
-      // The meter of the pattern: the mask of the pattern says which
-      // meter it is.
-      const meter = meterForMask(this.pattern.enable, this.meterSelect.value);
-      if (meter !== null) {
+      // The meter of the pattern: the time signature it carries.
+      if (this.pattern.mixed) {
         const flag = document.createElement('span');
         flag.className = 'pattern-flag pattern-flag--meter';
-        flag.textContent = meter.label;
-        flag.title = meter.title;
+        flag.textContent = 'MIXED';
+        flag.title = 'The patterns of the selection carry different meters';
         this.metaRow.append(flag);
+      } else {
+        const meter = meterOfTimesig(this.pattern.timesig);
+        if (meter !== null) {
+          const flag = document.createElement('span');
+          flag.className = 'pattern-flag pattern-flag--meter';
+          flag.textContent = meter.label;
+          flag.title = meter.title;
+          this.metaRow.append(flag);
+        }
       }
     }
 
-    if (this.pattern.triplet) {
-      const triplet = document.createElement('span');
-      triplet.className = 'pattern-flag';
-      triplet.textContent = 'TRIPLET';
-      this.metaRow.append(triplet);
+    if (this.pattern.compound) {
+      const compound = document.createElement('span');
+      compound.className = 'pattern-flag';
+      compound.textContent = 'SHUFFLE';
+      compound.title =
+        'The pattern plays on the compound grid, where a beat holds six columns';
+      this.metaRow.append(compound);
     }
 
     const cycle = document.createElement('span');
@@ -1555,13 +1599,15 @@ export class PatternGrid {
     const tempo = Math.max(1, this.engine.tempo);
     const sampleRate =
       this.engine.sampleRate > 0 ? this.engine.sampleRate : FALLBACK_SAMPLE_RATE;
-    const subSteps = pattern.triplet ? 4 : 3;
-    // The engine computes round(2.5 * sample_rate / tempo) samples.
-    const subStepSamples = Math.max(
+    // The engine computes round(60 * sample_rate / tempo) samples to the
+    // beat, and a beat holds eight columns on the straight grid and six on
+    // the compound one.
+    const beatSamples = Math.max(
       1,
-      Math.floor((5 * sampleRate + tempo) / (2 * tempo)),
+      Math.floor((120 * sampleRate + tempo) / (2 * tempo)),
     );
-    return (subSteps * subStepSamples) / sampleRate;
+    const columns = pattern.compound ? 6 : 8;
+    return beatSamples / columns / sampleRate;
   }
 
   private setRunning(running: boolean): void {

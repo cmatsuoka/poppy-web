@@ -10,10 +10,12 @@ import {
   PATTERN_SOURCE_USER,
   RHYTHM_BUTTON_COUNT,
   RHYTHM_NAMES,
+  TIMESIG,
   VOICE_PARAM,
   type Bank,
   type PanelState,
   type PatternSource,
+  type TimeSignature,
   type UserPattern,
 } from '../audio/protocol';
 import { FitScaler } from './fit';
@@ -33,7 +35,7 @@ import {
 } from './bank-file';
 import { loadUserPatterns, saveUserPatterns } from './user-store';
 import { UserNames, defaultUserName } from './user-names';
-import { meterByLabel, meterMask } from './meter';
+import { meterOfTimesig } from './meter';
 
 const Q16 = 65536;
 
@@ -402,10 +404,8 @@ function rhythmShortcutFor(
 function emptyUserPattern(): UserPattern {
   return {
     notes: new Array<number>(PATTERN_COLUMNS).fill(0),
-    enableLo: -1,
-    enableHi: -1,
+    timesig: TIMESIG['4/4'],
     period: PATTERN_COLUMNS,
-    triplet: false,
   };
 }
 
@@ -1067,8 +1067,8 @@ export class Panel {
       onToggle: (instrument, column, on) => {
         void this.writeStep(column, 1 << instrument, on);
       },
-      onMeter: (meter) => {
-        void this.writeMeter(meter);
+      onMeter: (timesig) => {
+        void this.writeTimesig(timesig);
       },
       onRename: () => {
         // The name of a pattern belongs to the pattern, so it is kept with
@@ -2157,16 +2157,18 @@ export class Panel {
    * Write the meter of the card into the user patterns of the selection.
    *
    * The meter says how many of the steps of a bar the machine plays, and
-   * the steps outside the bar are skipped. It belongs to the whole
-   * selection, the way a step of the card does: the mask is written into
-   * every user pattern that is latched.
+   * the steps outside the bar are skipped. It is written as the time
+   * signature of the meter, and the engine derives the mask of the steps
+   * from it. It belongs to the whole selection, the way a step of the card
+   * does: the signature is written into every user pattern that is
+   * latched.
    */
-  private async writeMeter(label: string): Promise<void> {
+  private async writeTimesig(timesig: TimeSignature): Promise<void> {
     if (this.displayedSource() !== PATTERN_SOURCE_USER) {
       return;
     }
 
-    const meter = meterByLabel(label);
+    const meter = meterOfTimesig(timesig);
     if (meter === null) {
       return;
     }
@@ -2177,16 +2179,12 @@ export class Panel {
       return;
     }
 
-    const mask = meterMask(meter);
-    const enableLo = Number(mask & 0xffffffffn) >>> 0;
-    const enableHi = Number((mask >> 32n) & 0xffffffffn) >>> 0;
-
     for (const slot of slots) {
       const pattern = await this.userPattern(slot);
       if (pattern === null) {
         return;
       }
-      const next: UserPattern = { ...pattern, enableLo, enableHi };
+      const next: UserPattern = { ...pattern, timesig };
       this.userPatterns.set(slot, next);
       this.engine.setUserPattern(slot, next);
     }

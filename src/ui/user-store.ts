@@ -6,18 +6,25 @@
  * still there after a reload. Only the patterns that were touched are
  * stored: every slot that was never written is still the empty pattern
  * the engine made when it started.
+ *
+ * A pattern is stored the way the engine holds it: the 64 columns of the
+ * cycle, the time signature it plays on and the length of the repeating
+ * part. The mask of the steps the machine plays is not stored: the engine
+ * derives it from the signature.
  */
 
-import { PATTERN_COLUMNS, type UserPattern } from '../audio/protocol';
+import {
+  PATTERN_COLUMNS,
+  timesigOf,
+  type UserPattern,
+} from '../audio/protocol';
 
-const STORAGE_KEY = 'poppy-web.user-patterns.v1';
+const STORAGE_KEY = 'poppy-web.user-patterns.v2';
 
 interface StoredPattern {
   notes: number[];
-  enableLo: number;
-  enableHi: number;
+  timesig: number;
   period: number;
-  triplet: boolean;
 }
 
 function isStoredPattern(value: unknown): value is StoredPattern {
@@ -76,10 +83,8 @@ export function loadUserPatterns(): Map<number, UserPattern> {
     }
     patterns.set(index, {
       notes: [...value.notes],
-      enableLo: value.enableLo >>> 0,
-      enableHi: value.enableHi >>> 0,
+      timesig: timesigOf(value.timesig ?? 0),
       period: value.period,
-      triplet: value.triplet,
     });
   }
 
@@ -92,10 +97,8 @@ export function saveUserPatterns(patterns: Map<number, UserPattern>): void {
   for (const [index, pattern] of patterns) {
     stored[String(index)] = {
       notes: [...pattern.notes],
-      enableLo: pattern.enableLo >>> 0,
-      enableHi: pattern.enableHi >>> 0,
+      timesig: pattern.timesig,
       period: pattern.period,
-      triplet: pattern.triplet,
     };
   }
 

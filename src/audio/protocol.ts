@@ -130,6 +130,71 @@ export type VoiceParam = (typeof VOICE_PARAM)[keyof typeof VOICE_PARAM];
  */
 export const PATTERN_ACCENT_BIT = 1 << 15;
 
+/**
+ * The time signatures a pattern can carry.
+ *
+ * A pattern names its time signature, and the engine derives the mask of
+ * the steps it plays from it: the 4/4 signature plays every column, the
+ * 3/4 signature skips the columns that lie outside its bar, and the 2/4
+ * and the 6/8 share the compound grid, where a beat holds six columns
+ * instead of eight. The numbers are the engine's own, `mp7_timesig`.
+ */
+export const TIMESIG = {
+  '4/4': 0,
+  '2/4': 1,
+  '3/4': 2,
+  '5/4': 3,
+  '6/8': 4,
+  '7/4': 5,
+} as const;
+
+/** The time signature of a pattern. */
+export type TimeSignature = (typeof TIMESIG)[keyof typeof TIMESIG];
+
+/**
+ * The time signature of a mask that belongs to no signature.
+ *
+ * A pattern that was written by hand may carry a mask of its own, and the
+ * mask of a combination of patterns with different signatures belongs to
+ * none of them.
+ */
+export const TIMESIG_NONE = -1;
+
+/**
+ * The time signature of a number the engine handed over.
+ *
+ * A number the engine does not know is read as 4/4: it is the signature
+ * that plays every column, and it is the one the machine comes up with.
+ */
+export function timesigOf(value: number): TimeSignature {
+  for (const entry of Object.entries(TIMESIG) as [string, TimeSignature][]) {
+    if (entry[1] === value) {
+      return entry[1];
+    }
+  }
+  return TIMESIG['4/4'];
+}
+
+/** The name of a time signature, as the card prints it. */
+export function labelOfTimesig(timesig: number): string {
+  for (const [label, value] of Object.entries(TIMESIG)) {
+    if (value === timesig) {
+      return label;
+    }
+  }
+  return '4/4';
+}
+
+/** The time signature a name stands for. */
+export function timesigOfLabel(label: string): TimeSignature | null {
+  for (const [name, value] of Object.entries(TIMESIG)) {
+    if (name === label) {
+      return value as TimeSignature;
+    }
+  }
+  return null;
+}
+
 // The engine's grid is a fixed 64 column cycle. A rhythm may store only its
 // shortest repeating period (16, 32 or 64 columns); the rest of the cycle
 // repeats it.
@@ -160,22 +225,36 @@ export interface PatternView {
   enableHi: number;
   notesPeriod: number;
   percussionPeriod: number;
-  triplet: boolean;
+  /**
+   * The time signature of the pattern.
+   *
+   * It is the signature the pattern carries, or `TIMESIG_NONE` when the
+   * pattern does not carry one: a factory rhythm that plays on a mask the
+   * engine does not name, or a combination of patterns.
+   */
+  timesig: number;
+  /**
+   * Whether the pattern plays on the compound grid.
+   *
+   * The compound grid is the one the 2/4 and the 6/8 play on: a beat
+   * holds six columns there and eight on the straight grid.
+   */
+  compound: boolean;
 }
 
 /**
- * A user-defined pattern: the 64 columns of the cycle, the columns that
- * take time, the length of the repeating part and the shuffle flag.
+ * A user-defined pattern: the 64 columns of the cycle, the time signature
+ * it plays on and the length of the repeating part.
  *
  * A column holds the fifteen instruments in its lower bits and the accent
- * flag in its sixteenth one, so the accent travels with the pattern.
+ * flag in its sixteenth one, so the accent travels with the pattern. The
+ * mask of the steps the machine plays is not carried here: the engine
+ * derives it from the time signature.
  */
 export interface UserPattern {
   notes: number[];
-  enableLo: number;
-  enableHi: number;
+  timesig: TimeSignature;
   period: number;
-  triplet: boolean;
 }
 
 export type EngineCommand =
