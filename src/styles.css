@@ -2252,18 +2252,3 @@ body {
     font-size: 6px;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-  }
-
-  /* The lamp keeps its fade. The flash of the lamp and the pulse of the
-     waiting marker carry the state of the machine and are not decoration:
-     they run whatever the system asks for. */
-  .lamp::after {
-    transition-duration: 90ms !important;
-  }
-}

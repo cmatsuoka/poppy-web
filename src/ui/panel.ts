@@ -1067,9 +1067,6 @@ export class Panel {
 
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private lastFlash = -1;
-  private readonly reducedMotion = window.matchMedia(
-    '(prefers-reduced-motion: reduce)',
-  );
 
   constructor(engine: PoppyEngine, host: HTMLElement) {
     this.engine = engine;
@@ -2808,15 +2805,6 @@ export class Panel {
     this.clearLegendTimer();
 
     const names = this.legendNames.flat();
-
-    if (this.reducedMotion.matches) {
-      this.legendFading = false;
-      for (const name of names) {
-        name.classList.remove('is-fading');
-      }
-      this.writeLegendNames();
-      return;
-    }
 
     this.legendFading = true;
     for (const name of names) {

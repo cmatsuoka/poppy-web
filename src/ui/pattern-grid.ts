@@ -18,9 +18,6 @@
  * column just before the boundary, so it is already on the column when the
  * engine fires its hits.
  *
- * With `prefers-reduced-motion` the cursor jumps straight to the reported
- * column instead of gliding.
- *
  * The Guiro row is printed differently from the other rows. The Guiro is
  * the only gated voice: the machine holds it open while the gate is on,
  * so a run of hits is one continuous roll and not a row of separate
@@ -275,9 +272,6 @@ export class PatternGrid {
   private columnWidth = 0;
   private rowCount = 0;
 
-  private readonly reducedMotion = window.matchMedia(
-    '(prefers-reduced-motion: reduce)',
-  );
   private readonly resizeObserver: ResizeObserver;
 
   constructor(
@@ -1643,7 +1637,7 @@ export class PatternGrid {
     // over, and neither is the wrap of the cycle: the cursor jumps there
     // with the rest of the grid.
     let lead = 0;
-    if (!this.reducedMotion.matches && next === current + 1) {
+    if (next === current + 1) {
       const transition = Math.min(0.25 * duration, 0.02);
       lead = smoothstep((since - (duration - transition)) / transition);
     }
