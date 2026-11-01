@@ -1319,6 +1319,9 @@ body {
 
 .rhythm-key {
   position: relative;
+  /* The key fills the slot of the bed it stands in. */
+  display: block;
+  width: 100%;
   /* How far the key travels while it is pressed. The panel reads this
      number, so a press is always given to the key it was made on. */
   --travel: 3px;
@@ -1348,10 +1351,23 @@ body {
     background 70ms ease;
 }
 
-.rhythm-key::before {
+/*
+ * The triangle that points at a rhythm key is printed on the faceplate,
+ * above the key bed. It is not part of the key, so it does not travel
+ * when the key is pressed: the slot holds the triangle and the key
+ * moves inside it.
+ */
+.rhythm-slot {
+  position: relative;
+}
+
+.rhythm-slot::before {
   content: '';
   position: absolute;
-  top: -17px;
+  /* The triangle is printed on the faceplate, a little above the key.
+     The key has a border of its own, so the triangle sits one pixel
+     lower than the edge of the bed to keep the place it always had. */
+  top: -16px;
   left: 50%;
   width: 0;
   height: 0;
@@ -1359,6 +1375,11 @@ body {
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-bottom: 5px solid rgb(35 35 42 / 45%);
+  pointer-events: none;
+}
+
+.rhythm-slot[data-pressed='true']::before {
+  border-bottom-color: rgb(35 35 42 / 60%);
 }
 
 .key-tick {
@@ -1410,11 +1431,6 @@ body {
     0 0 15px 2px rgb(255 176 84 / 50%),
     inset 0 5px 9px rgb(120 80 30 / 32%);
   color: #6a5a38;
-}
-
-.rhythm-key[aria-pressed='true']::before {
-  transform: translateX(-50%) translateY(-5px);
-  border-bottom-color: rgb(35 35 42 / 60%);
 }
 
 .rhythm-key[aria-pressed='true'] .key-tick {

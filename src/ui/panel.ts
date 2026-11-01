@@ -940,6 +940,7 @@ export class Panel {
   private readonly engine: PoppyEngine;
   private readonly root: HTMLDivElement;
   private readonly keyButtons: HTMLButtonElement[] = [];
+  private readonly keySlots: HTMLElement[] = [];
   private readonly legendRows: HTMLElement[] = [];
   private readonly legendNames: HTMLElement[][] = [[], []];
   private rhythmSection!: HTMLElement;
@@ -1740,7 +1741,13 @@ export class Panel {
       // A long press on a touch screen must not open the context menu.
       button.addEventListener('contextmenu', (event) => event.preventDefault());
       this.keyButtons.push(button);
-      keys.append(button);
+      // The triangle that points at the key is printed on the faceplate,
+      // not on the key: it stands still while the key travels.
+      const slot = element('div', 'rhythm-slot');
+      slot.dataset.pressed = 'false';
+      slot.append(button);
+      this.keySlots.push(slot);
+      keys.append(slot);
     }
 
     // The start/stop switch is momentary: it is pressed down while the
@@ -2760,6 +2767,12 @@ export class Panel {
       )}`;
       if (button.getAttribute('aria-label') !== label) {
         button.setAttribute('aria-label', label);
+      }
+      // The triangle on the faceplate tells which key belongs to the
+      // selection. It stands still, so only its ink changes.
+      const slot = this.keySlots[index];
+      if (slot && slot.dataset.pressed !== (latched ? 'true' : 'false')) {
+        slot.dataset.pressed = latched ? 'true' : 'false';
       }
     });
 
