@@ -219,7 +219,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(2px, 0.35vw, 5px);
+  gap: clamp(1px, 0.25vw, 4px);
 }
 
 .mini-dial {
@@ -273,10 +273,17 @@ body {
   outline-offset: 3px;
 }
 
+/* The first line under the dial stands a little apart from it. */
+.mini-dial + .mini-readout,
+.mini-dial + .mini-caption {
+  margin-top: clamp(3px, 0.45vw, 9px);
+}
+
 /* The caption of a knob of the band. */
 .mini-caption {
-  font-size: clamp(5px, 0.52vw, 7px);
+  font-size: clamp(6px, 0.62vw, 8.5px);
   font-weight: 700;
+  line-height: 1.1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -288,8 +295,9 @@ body {
   max-width: clamp(52px, 5.4vw, 76px);
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: clamp(6px, 0.62vw, 9px);
+  font-size: clamp(6.5px, 0.68vw, 10px);
   font-weight: 800;
+  line-height: 1.1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink);
@@ -930,9 +938,10 @@ body {
 
 .tempo-readout {
   margin-top: 1px;
-  font-size: clamp(8px, 0.7vw, 10px);
+  font-size: clamp(9px, 0.8vw, 12px);
+  font-weight: 800;
   letter-spacing: 0.08em;
-  color: var(--ink-soft);
+  color: var(--ink);
 }
 
 .right-controls {
