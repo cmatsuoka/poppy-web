@@ -6,12 +6,12 @@
  * skipped step takes no time at all, so the bar of the meter is shorter
  * than the bar of the card.
  *
- * The signature is also the grid the pattern plays on. The 4/4, the 3/4,
- * the 5/4 and the 7/4 play on the straight grid, where a beat holds eight
- * columns of the cycle. The 2/4 and the 6/8 share the compound grid,
- * where a beat holds six columns: it is the only grid that can carry a
- * 2:1 swung eighth, and the three factory rhythms that play on it are the
- * shuffle rhythms of the machine.
+ * The signature is also the grid the pattern plays on. The 4/4, the 3/4
+ * and the 7/4 play on the straight grid, where a beat holds eight columns of
+ * the cycle. The 2/4, the 5/4 and the 6/8 play on the compound grid, where a
+ * beat holds six columns: it is the only grid that can carry a 2:1 swung
+ * eighth, and the three factory rhythms that play on it are the shuffle
+ * rhythms of the machine.
  *
  * The mask of the steps a meter plays is the engine's own: it is derived
  * from the signature, and the panel reads it back from the engine instead

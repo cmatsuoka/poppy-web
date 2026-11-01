@@ -231,29 +231,27 @@ export interface PanelState {
   source: PatternSource;
 }
 
+/**
+ * A view of a pattern: the grid of the cycle, every voice of it.
+ *
+ * The engine composes the view, so the panel prints it as it is: the notes
+ * of the patterns that are combined are already OR-ed together, the shared
+ * percussion layer is already merged in, and the mask is the one the
+ * selection plays on.
+ */
 export interface PatternView {
-  rhythm: number;
+  /**
+   * The 64 columns of the cycle, one bit per voice and the accent flag in
+   * the highest bit.
+   */
   notes: number[];
-  percussion: number[];
   enableLo: number;
   enableHi: number;
-  /**
-   * The length of the grid the view carries.
-   *
-   * The view of a factory rhythm is the whole cycle: the engine repeats the
-   * period a rhythm is stored in out to the 64 columns of the cycle before
-   * the panel sees it, so its period is the length of the cycle. A user
-   * pattern keeps the period it was written with.
-   */
-  notesPeriod: number;
-  /** The length of the shared percussion layer: a whole cycle as well. */
-  percussionPeriod: number;
   /**
    * The time signature of the pattern.
    *
    * It is the signature the pattern carries, or `TIMESIG_NONE` when the
-   * pattern does not carry one: a factory rhythm that plays on a mask the
-   * engine does not name, or a combination of patterns.
+   * patterns that are combined carry different ones.
    */
   timesig: number;
   /**
@@ -266,18 +264,18 @@ export interface PatternView {
 }
 
 /**
- * A user-defined pattern: the 64 columns of the cycle, the time signature
- * it plays on and the length of the repeating part.
+ * A user-defined pattern: the 64 columns of the cycle and the time
+ * signature it plays on.
  *
  * A column holds the fifteen instruments in its lower bits and the accent
  * flag in its sixteenth one, so the accent travels with the pattern. The
  * mask of the steps the machine plays is not carried here: the engine
- * derives it from the time signature.
+ * derives it from the time signature, and the steps it leaves out are the
+ * ones the grid does not use.
  */
 export interface UserPattern {
   notes: number[];
   timesig: TimeSignature;
-  period: number;
 }
 
 export type EngineCommand =
@@ -295,7 +293,7 @@ export type EngineCommand =
   | { type: 'hihatCutoff'; value: number }
   | { type: 'accentGain'; value: number }
   | { type: 'spread'; value: number }
-  | { type: 'pattern'; rhythm: number }
+  | { type: 'pattern'; bank: Bank; buttons: number }
   | { type: 'source'; source: PatternSource }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
   | { type: 'userPatternRequest'; index: number };
@@ -303,7 +301,7 @@ export type EngineCommand =
 export type EngineEvent =
   | { type: 'ready' }
   | { type: 'panel'; state: PanelState }
-  | { type: 'pattern'; view: PatternView }
+  | { type: 'pattern'; bank: Bank; buttons: number; view: PatternView }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
   | { type: 'error'; message: string };
 

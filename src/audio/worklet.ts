@@ -10,6 +10,7 @@ import {
   TIMESIG,
   TIMESIG_NONE,
   timesigOf,
+  type Bank,
   type EngineCommand,
   type EngineEvent,
   type PanelState,
@@ -341,7 +342,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
         break;
       }
       case 'pattern':
-        this.sendPattern(command.rhythm);
+        this.sendPattern(command.bank, command.buttons);
         break;
       case 'source':
         module._poppy_set_pattern_source(this.context, command.source);
@@ -361,7 +362,6 @@ class PoppyProcessor extends AudioWorkletProcessor {
           command.index,
           this.userNotesPtr,
           command.pattern.timesig,
-          command.pattern.period,
         );
         break;
       }
@@ -427,29 +427,33 @@ class PoppyProcessor extends AudioWorkletProcessor {
     this.emit({ type: 'panel', state: { ...panel } });
   }
 
-  private sendPattern(rhythm: number): void {
+  /**
+   * Ask the engine for the view of a selection.
+   *
+   * The engine composes the selection: the notes of the patterns that are
+   * combined are OR-ed together, the shared percussion layer is merged into
+   * the factory rhythms, and the mask is the one the selection plays on. The
+   * panel prints the view as it is.
+   */
+  private sendPattern(bank: Bank, buttons: number): void {
     const module = this.module;
     if (module === null) {
       return;
     }
 
-    // The pattern that is in effect: the factory rhythm in the preset
-    // source, the user slot in the user source.
-    const pointer = module._poppy_pattern(this.context, rhythm);
+    const pointer = module._poppy_selection_pattern(this.context, bank, buttons);
     const base = pointer >> 2;
     const heap = module.HEAP32;
 
-    if ((heap[base + 8] ?? 0) === 0) {
+    if ((heap[base + 5] ?? 0) === 0) {
       this.emit({
         type: 'pattern',
+        bank,
+        buttons,
         view: {
-          rhythm,
           notes: [],
-          percussion: [],
           enableLo: 0,
           enableHi: 0,
-          notesPeriod: 0,
-          percussionPeriod: 0,
           timesig: TIMESIG_NONE,
           compound: false,
         } satisfies PatternView,
@@ -458,39 +462,25 @@ class PoppyProcessor extends AudioWorkletProcessor {
     }
 
     const notesPointer = (heap[base] ?? 0) >>> 0;
-    const percussionPointer = (heap[base + 1] ?? 0) >>> 0;
-    const notesPeriod = heap[base + 4] ?? 0;
-    const percussionPeriod = heap[base + 5] ?? 0;
+    const columns = heap[base + 6] ?? 0;
     const u16Base = module.HEAPU16;
     const notesStart = notesPointer >> 1;
-    const percussionStart = percussionPointer >> 1;
 
     const notes: number[] = [];
-    for (let index = 0; index < notesPeriod; index += 1) {
+    for (let index = 0; index < columns; index += 1) {
       notes.push(u16Base[notesStart + index] ?? 0);
-    }
-
-    // A user pattern carries its own percussion lines, so it comes without
-    // the shared layer.
-    const percussion: number[] = [];
-    if (percussionPointer !== 0) {
-      for (let index = 0; index < percussionPeriod; index += 1) {
-        percussion.push(u16Base[percussionStart + index] ?? 0);
-      }
     }
 
     this.emit({
       type: 'pattern',
+      bank,
+      buttons,
       view: {
-        rhythm,
         notes,
-        percussion,
-        enableLo: (heap[base + 2] ?? 0) >>> 0,
-        enableHi: (heap[base + 3] ?? 0) >>> 0,
-        notesPeriod,
-        percussionPeriod: percussionPointer === 0 ? 0 : percussionPeriod,
-        timesig: heap[base + 6] ?? TIMESIG_NONE,
-        compound: (heap[base + 7] ?? 0) !== 0,
+        enableLo: (heap[base + 1] ?? 0) >>> 0,
+        enableHi: (heap[base + 2] ?? 0) >>> 0,
+        timesig: heap[base + 3] ?? TIMESIG_NONE,
+        compound: (heap[base + 4] ?? 0) !== 0,
       } satisfies PatternView,
     });
   }
@@ -506,26 +496,24 @@ class PoppyProcessor extends AudioWorkletProcessor {
     const base = pointer >> 2;
     const heap = module.HEAP32;
 
-    if ((heap[base + 8] ?? 0) === 0) {
+    if ((heap[base + 2] ?? 0) === 0) {
       this.emit({
         type: 'userPattern',
         index: slot,
         pattern: {
           notes: new Array<number>(USER_PATTERN_COLUMNS).fill(0),
           timesig: TIMESIG['4/4'],
-          period: USER_PATTERN_COLUMNS,
         },
       });
       return;
     }
 
     const notesPointer = (heap[base] ?? 0) >>> 0;
-    const notesPeriod = heap[base + 4] ?? 0;
     const u16Base = module.HEAPU16;
     const notesStart = notesPointer >> 1;
 
     const notes: number[] = new Array<number>(USER_PATTERN_COLUMNS).fill(0);
-    for (let index = 0; index < notesPeriod; index += 1) {
+    for (let index = 0; index < USER_PATTERN_COLUMNS; index += 1) {
       notes[index] = u16Base[notesStart + index] ?? 0;
     }
 
@@ -534,8 +522,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
       index: slot,
       pattern: {
         notes,
-        timesig: timesigOf(heap[base + 6] ?? TIMESIG_NONE),
-        period: notesPeriod,
+        timesig: timesigOf(heap[base + 1] ?? TIMESIG_NONE),
       },
     });
   }

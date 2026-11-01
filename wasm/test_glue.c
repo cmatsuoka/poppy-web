@@ -72,7 +72,7 @@ static void prepare_pattern(void *ctx, int slot, const uint16_t *notes)
     poppy_reset(ctx);
     poppy_set_pattern_source(ctx, 1);
     poppy_set_user_pattern(ctx, slot, (int32_t)(uintptr_t)notes,
-                            MP7_TIMESIG_4_4, 64);
+                            MP7_TIMESIG_4_4);
     poppy_select_rhythm(ctx, 0, 1 << slot);
 }
 
@@ -98,20 +98,20 @@ int main(void)
     check(mp7_get_user_pattern(ctx, 0, &empty) == 0,
           "the user slots come up empty");
 
-    /* The view of a factory rhythm carries the whole cycle: the period the
-     * rhythm is stored in is repeated out to the 64 columns of the cycle
-     * before the panel sees it. */
-    int32_t *factory = poppy_factory_pattern(6);
-    check(factory[8] == 1, "the view of a factory rhythm is valid");
-    check(factory[4] == (int32_t)MP7_PATTERN_COLUMNS,
-          "the view of a factory rhythm is a whole cycle long");
-    check(factory[5] == (int32_t)MP7_PATTERN_COLUMNS,
-          "the shared percussion layer is a whole cycle long");
+    /* The view of a selection carries the whole cycle: the period a rhythm
+     * is stored in is repeated out to the 64 columns of the cycle before
+     * the panel sees it, and the shared percussion layer is merged into it
+     * in the preset source. */
+    int32_t *factory = poppy_selection_pattern(ctx, 0, 1 << 6);
+    check(factory[5] == 1, "the view of a selection is valid");
+    check(factory[6] == (int32_t)MP7_PATTERN_COLUMNS,
+          "the view of a selection is a whole cycle long");
 
     /* The grid of the view is the grid the engine holds, column for
      * column, so the panel sees the whole cycle. */
     struct mp7_pattern_view raw;
-    mp7_get_factory_pattern((mp7_rhythm)6, &raw);
+    mp7_get_selection_pattern(ctx, MP7_BANK_A,
+                               mp7_rhythm_button_bit((mp7_rhythm)6), &raw);
     uint16_t *factory_notes = (uint16_t *)(uintptr_t)factory[0];
     int same = 1;
     for (int column = 0; column < (int)MP7_PATTERN_COLUMNS; column++) {
@@ -121,11 +121,21 @@ int main(void)
     }
     check(same, "the grid of a view is the grid of the engine");
 
-    /* A rhythm that does not exist has no view. */
-    check(poppy_factory_pattern(MP7_RHYTHM_COUNT)[8] == 0,
-          "a rhythm out of range has no view");
-    check(poppy_factory_pattern(-1)[8] == 0,
-          "a rhythm before the first one has no view");
+    /* The view of a selection is the composition the engine plays: the
+     * notes of the rhythms that are combined are OR-ed together and the
+     * masks are AND-ed. */
+    int32_t *selection = poppy_selection_pattern(ctx, 0, (1 << 6) | (1 << 0));
+    check(selection[5] == 1, "the view of a selection is valid");
+    check(selection[6] == (int32_t)MP7_PATTERN_COLUMNS,
+          "the view of a selection is a whole cycle long");
+    check(selection[3] == -1,
+          "a selection of different meters carries no meter");
+    check(selection[4] == 0,
+          "a selection of two straight rhythms is on the straight grid");
+
+    int32_t *single = poppy_selection_pattern(ctx, 0, 1 << 6);
+    check(single[3] == MP7_TIMESIG_4_4,
+          "a selection of one rhythm carries its meter");
 
     /* The row of the 5/4 meter: the mask the engine holds for it is the
      * row the rhythms of the panel were written on.
@@ -134,10 +144,10 @@ int main(void)
      *
      * The bar is five beats long, and the runs of the row are the cells of
      * the groove. */
-    check(mp7_timesig_enable_mask(MP7_TIMESIG_5_4) ==
+    check(mp7_timesig_enable_mask(MP7_TIMESIG_5_4T) ==
               UINT64_C(0x0F0F3F3F0F0F3F3F),
           "the 5/4 meter plays the row of the panel");
-    check(mp7_timesig_enable_mask(MP7_TIMESIG_6_8) ==
+    check(mp7_timesig_enable_mask(MP7_TIMESIG_6_8T) ==
               mp7_timesig_enable_mask(MP7_TIMESIG_2_4),
           "the 6/8 meter plays on the compound grid");
 
@@ -160,7 +170,7 @@ int main(void)
     poppy_reset(ctx);
     poppy_set_pattern_source(ctx, 1);
     poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)bass_notes,
-                            MP7_TIMESIG_4_4, 64);
+                            MP7_TIMESIG_4_4);
     poppy_select_rhythm(ctx, 0, 1 << 6);
     for (int i = 0; i < 20; i++) {
         poppy_process(ctx, user + i * 512 * 2, 512);
@@ -185,7 +195,7 @@ int main(void)
     }
 
     check(poppy_set_user_pattern(ctx, 3, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_4_4, 64) == 1,
+                                 MP7_TIMESIG_4_4) == 1,
           "a pattern is written into a slot");
 
     struct mp7_user_pattern read;
@@ -193,12 +203,11 @@ int main(void)
     check(memcmp(read.notes, notes, sizeof(notes)) == 0,
           "the notes come back unchanged");
     check(read.timesig == MP7_TIMESIG_4_4, "the time signature comes back unchanged");
-    check(read.notes_period == 64, "the period comes back unchanged");
     check(poppy_set_user_pattern(ctx, 99, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_4_4, 64) == 0,
+                                 MP7_TIMESIG_4_4) == 0,
           "a slot out of range is refused");
     check(poppy_set_user_pattern(ctx, 99, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_COUNT, 64) == 0,
+                                 MP7_TIMESIG_COUNT) == 0,
           "a time signature the engine does not know is refused");
 
     /* The meter of a pattern: the pattern names its time signature and the
@@ -206,17 +215,27 @@ int main(void)
      * back in the view of the slot, and the sequencer never visits a step
      * the mask leaves out. */
     check(poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_3_4, 64) == 1,
+                                 MP7_TIMESIG_3_4) == 1,
           "a pattern with a meter is written into a slot");
     check(mp7_get_user_pattern(ctx, 6, &read), "the slot with a meter is read");
     check(read.timesig == MP7_TIMESIG_3_4, "the meter comes back unchanged");
 
     int32_t *metered = poppy_user_pattern(ctx, 6);
-    check((metered[2] != 0) || (metered[3] != 0),
-          "the view of the slot carries the mask of the meter");
-    check(metered[6] == MP7_TIMESIG_3_4,
-          "the view of the slot carries the meter");
-    check(metered[7] == 0, "the 3/4 meter plays on the straight grid");
+    check(metered[1] == MP7_TIMESIG_3_4,
+          "the slot carries the meter");
+    check(metered[2] == 1, "the slot is not empty");
+
+    /* The mask of the meter and the grid it plays on come with the view of
+     * the selection the slot is in. The user source is the one the slot
+     * belongs to, so the view is the one of the slot. */
+    poppy_set_pattern_source(ctx, 1);
+    poppy_select_rhythm(ctx, 0, 1 << 6);
+    int32_t *metered_view = poppy_selection_pattern(ctx, 0, 1 << 6);
+    check((metered_view[1] != 0) || (metered_view[2] != 0),
+          "the view of the selection carries the mask of the meter");
+    check(metered_view[3] == MP7_TIMESIG_3_4,
+          "the view of the selection carries the meter");
+    check(metered_view[4] == 0, "the 3/4 meter plays on the straight grid");
 
     static int16_t masked[307200];
     int skipped = 0;
@@ -224,8 +243,7 @@ int main(void)
 
     poppy_reset(ctx);
     poppy_set_pattern_source(ctx, 1);
-    poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes, MP7_TIMESIG_3_4,
-                            64);
+    poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes, MP7_TIMESIG_3_4);
     poppy_select_rhythm(ctx, 0, 1 << 6);
     /* The cycle of the meter is 48 columns long, so the render has to be
      * long enough to walk over all of them. */
@@ -241,15 +259,17 @@ int main(void)
     /* The 2/4 and the 6/8 share the compound grid: a beat holds six
      * columns there, and the view of the pattern says so. */
     check(poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_2_4, 64) == 1,
+                                 MP7_TIMESIG_2_4) == 1,
           "a pattern in 2/4 is written into a slot");
-    int32_t *compound = poppy_user_pattern(ctx, 6);
-    check(compound[7] == 1, "the 2/4 meter plays on the compound grid");
+    poppy_set_pattern_source(ctx, 1);
+    poppy_select_rhythm(ctx, 0, 1 << 6);
+    int32_t *compound = poppy_selection_pattern(ctx, 0, 1 << 6);
+    check(compound[4] == 1, "the 2/4 meter plays on the compound grid");
     check(poppy_set_user_pattern(ctx, 6, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_6_8, 64) == 1,
+                                 MP7_TIMESIG_6_8T) == 1,
           "a pattern in 6/8 is written into a slot");
-    compound = poppy_user_pattern(ctx, 6);
-    check(compound[7] == 1, "the 6/8 meter plays on the compound grid");
+    compound = poppy_selection_pattern(ctx, 0, 1 << 6);
+    check(compound[4] == 1, "the 6/8 meter plays on the compound grid");
 
     /* An accented column comes back as it was written, accent flag and all. */
     for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
@@ -257,7 +277,7 @@ int main(void)
                                     MP7_PATTERN_ACCENT);
     }
     check(poppy_set_user_pattern(ctx, 4, (int32_t)(uintptr_t)notes,
-                                 MP7_TIMESIG_4_4, 64) == 1,
+                                 MP7_TIMESIG_4_4) == 1,
           "an accented pattern is written into a slot");
     check(mp7_get_user_pattern(ctx, 4, &read), "the accented slot can be read");
     check(memcmp(read.notes, notes, sizeof(notes)) == 0,
@@ -275,8 +295,7 @@ int main(void)
     for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
         notes[column] = (uint16_t)(1u << 0);
     }
-    poppy_set_user_pattern(ctx, 5, (int32_t)(uintptr_t)notes, MP7_TIMESIG_4_4,
-                            64);
+    poppy_set_user_pattern(ctx, 5, (int32_t)(uintptr_t)notes, MP7_TIMESIG_4_4);
     poppy_select_rhythm(ctx, 0, 1 << 5);
     for (int i = 0; i < 20; i++) {
         poppy_process(ctx, plain + i * 512 * 2, 512);
@@ -285,8 +304,7 @@ int main(void)
     for (int column = 0; column < MP7_USER_PATTERN_COLUMNS; column++) {
         notes[column] = (uint16_t)((1u << 0) | MP7_PATTERN_ACCENT);
     }
-    poppy_set_user_pattern(ctx, 5, (int32_t)(uintptr_t)notes, MP7_TIMESIG_4_4,
-                            64);
+    poppy_set_user_pattern(ctx, 5, (int32_t)(uintptr_t)notes, MP7_TIMESIG_4_4);
     for (int i = 0; i < 20; i++) {
         poppy_process(ctx, accented + i * 512 * 2, 512);
     }

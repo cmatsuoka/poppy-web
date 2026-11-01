@@ -19,12 +19,11 @@ import {
   type UserPattern,
 } from '../audio/protocol';
 
-const STORAGE_KEY = 'poppy-web.user-patterns.v2';
+const STORAGE_KEY = 'poppy-web.user-patterns.v3';
 
 interface StoredPattern {
   notes: number[];
   timesig: number;
-  period: number;
 }
 
 function isStoredPattern(value: unknown): value is StoredPattern {
@@ -84,7 +83,6 @@ export function loadUserPatterns(): Map<number, UserPattern> {
     patterns.set(index, {
       notes: [...value.notes],
       timesig: timesigOf(value.timesig ?? 0),
-      period: value.period,
     });
   }
 
@@ -98,7 +96,6 @@ export function saveUserPatterns(patterns: Map<number, UserPattern>): void {
     stored[String(index)] = {
       notes: [...pattern.notes],
       timesig: pattern.timesig,
-      period: pattern.period,
     };
   }
 

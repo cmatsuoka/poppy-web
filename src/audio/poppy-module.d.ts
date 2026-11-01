@@ -26,8 +26,7 @@ declare module '*poppy.mjs' {
     _poppy_set_hihat_cutoff(ctx: number, cutoffHz: number): void;
     _poppy_set_accent_gain(ctx: number, q16: number): void;
     _poppy_panel_state(ctx: number): number;
-    _poppy_factory_pattern(rhythm: number): number;
-    _poppy_pattern(ctx: number, rhythm: number): number;
+    _poppy_selection_pattern(ctx: number, bank: number, buttons: number): number;
     _poppy_set_pattern_source(ctx: number, source: number): void;
     _poppy_get_pattern_source(ctx: number): number;
     _poppy_set_user_pattern(
@@ -35,7 +34,6 @@ declare module '*poppy.mjs' {
       index: number,
       notesPtr: number,
       timesig: number,
-      period: number,
     ): number;
     _poppy_user_pattern(ctx: number, index: number): number;
   }

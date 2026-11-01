@@ -49,8 +49,6 @@ const Q16 = 65536;
  */
 const SNARE1_FACTORY_DECAY_MS = 400;
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
 /**
  * The knobs of the band under the black cover.
  *
@@ -396,25 +394,6 @@ function element<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/**
- * The little arrow on the reset button of the band.
- *
- * It is the mark of a control that puts things back the way they came.
- */
-function resetIcon(className: string): SVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', className);
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute(
-    'd',
-    'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z',
-  );
-  svg.append(path);
-  return svg;
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -461,7 +440,6 @@ function emptyUserPattern(): UserPattern {
   return {
     notes: new Array<number>(PATTERN_COLUMNS).fill(0),
     timesig: TIMESIG['4/4'],
-    period: PATTERN_COLUMNS,
   };
 }
 
@@ -1349,7 +1327,7 @@ export class Panel {
     reset.title =
       'Put the knobs of the selected memory position back to the defaults';
     reset.setAttribute('aria-label', reset.title);
-    reset.append(resetIcon('write-strip-reset-icon'));
+    reset.textContent = 'RESET';
     reset.addEventListener('click', () => {
       this.resetKnobs();
     });

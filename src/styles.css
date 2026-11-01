@@ -380,7 +380,9 @@ body {
 
 /* The square button at the end of the band that puts the knobs of the
    selected memory position back. It is as big as the square of the memory
-   positions next to it, and it is black. */
+   positions next to it, and it is black. The word on it is printed, the
+   way the panel prints everything else, and the button is a quiet piece of
+   black plastic rather than a heavy block. */
 .write-strip-reset {
   display: inline-flex;
   align-items: center;
@@ -389,44 +391,44 @@ body {
   width: calc(var(--memory-size) * 2 + 2px);
   height: calc(var(--memory-size) * 2 + 2px);
   padding: 0;
-  border: 1px solid rgb(0 0 0 / 55%);
-  border-radius: 2px;
-  background: linear-gradient(#3c3c41, #161618);
-  color: #f0eee8;
+  border: 1px solid rgb(0 0 0 / 40%);
+  border-radius: 3px;
+  background: linear-gradient(#313136, #1c1c20);
+  color: #d8d5cc;
+  font-family: inherit;
+  font-size: clamp(6px, 0.62vw, 9px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 60%);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 24%),
-    inset 0 -2px 4px rgb(0 0 0 / 55%),
-    0 1px 2px rgb(0 0 0 / 35%);
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    0 1px 2px rgb(0 0 0 / 25%);
   cursor: pointer;
   transition:
     transform 90ms ease,
     box-shadow 90ms ease,
-    background 90ms linear;
+    background 90ms linear,
+    color 90ms linear;
 }
 
 /* The button goes down while the finger is on it. */
 .write-strip-reset:active {
   transform: translateY(1px);
-  background: linear-gradient(#2c2c30, #101012);
-  box-shadow:
-    inset 0 2px 4px rgb(0 0 0 / 75%),
-    inset 0 -1px 0 rgb(255 255 255 / 8%);
+  background: linear-gradient(#242429, #161619);
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 45%);
 }
 
 .write-strip-reset:hover {
-  background: linear-gradient(#4a4a50, #202024);
-  border-color: rgb(0 0 0 / 70%);
+  background: linear-gradient(#3b3b42, #232328);
+  border-color: rgb(0 0 0 / 55%);
+  color: #eae7de;
 }
 
 .write-strip-reset:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-}
-
-.write-strip-reset-icon {
-  width: 55%;
-  height: 55%;
-  fill: currentcolor;
 }
 
 .faceplate {

@@ -212,15 +212,21 @@ export class PatternGrid {
   private readonly onSave: ToolAction | null;
   private readonly stopWatchingNames: () => void;
 
-  private readonly views = new Map<number, PatternView>();
-  private readonly requested = new Set<number>();
-  private percussion: number[] = [];
-  private percussionPeriod = 0;
+  /**
+   * The view of the selection the card prints.
+   *
+   * The engine composes it, so the card holds the grid as it is: the notes
+   * of the patterns that are combined are already OR-ed together and the
+   * shared percussion layer is already merged in.
+   */
+  private view: PatternView | null = null;
+  private requested = '';
 
   private pattern: CardPattern | null = null;
   private applied: number[] = [];
   private pending: number[] = [];
   private bank: Bank = 0;
+  private buttons = 0;
   private source: PatternSource = 0;
   /**
    * The row of the grid the keyboard is on and the step it points at.
@@ -506,6 +512,7 @@ export class PatternGrid {
 
     const bankChanged = this.bank !== state.bank;
     this.bank = state.bank;
+    this.buttons = state.buttons;
 
     // The card shows the patterns of the source the machine plays. When the
     // source changes, the patterns it holds are the ones of the other set.
@@ -516,9 +523,10 @@ export class PatternGrid {
 
     if (!sameRhythms(applied, this.applied)) {
       this.applied = applied;
-      this.requestViews(applied);
+      this.requestView(state.bank, state.buttons);
       this.rebuild();
     } else if (bankChanged) {
+      this.requestView(state.bank, state.buttons);
       this.updateMeta();
     }
 
@@ -633,92 +641,64 @@ export class PatternGrid {
    * the patterns the card shows out of date.
    */
   invalidate(): void {
-    this.views.clear();
-    this.requested.clear();
-    // The shared percussion layer belongs to the factory rhythms only: a
-    // user pattern carries its own percussion lines.
-    this.percussion = [];
-    this.percussionPeriod = 0;
-    this.requestViews(this.applied);
+    this.view = null;
+    this.requested = '';
+    this.requestView(this.bank, this.buttons);
     this.rebuild();
   }
 
-  private requestViews(rhythms: number[]): void {
-    for (const rhythm of rhythms) {
-      if (this.requested.has(rhythm)) {
-        continue;
-      }
-      this.requested.add(rhythm);
-      void this.engine
-        .getPattern(rhythm)
-        .then((view) => {
-          this.views.set(rhythm, view);
-          if (view.percussion.length > 0) {
-            this.percussion = view.percussion;
-            this.percussionPeriod = view.percussionPeriod;
-          }
-          this.rebuild();
-        })
-        .catch((error: unknown) => {
-          this.requested.delete(rhythm);
-          this.stateRow.textContent =
-            error instanceof Error ? error.message : String(error);
-        });
+  /** Ask the engine for the view of the selection the card prints. */
+  private requestView(bank: Bank, buttons: number): void {
+    const key = `${bank}:${buttons}`;
+
+    if (this.requested === key) {
+      return;
     }
+    this.requested = key;
+
+    void this.engine
+      .getPattern(bank, buttons)
+      .then((view) => {
+        this.view = view;
+        this.rebuild();
+      })
+      .catch((error: unknown) => {
+        this.requested = '';
+        this.stateRow.textContent =
+          error instanceof Error ? error.message : String(error);
+      });
   }
 
-  /** Merge the selected rhythms the way the engine merges them. */
+  /**
+   * The pattern the card prints.
+   *
+   * The engine composes the selection, so the grid is taken as it is: the
+   * notes of the patterns that are combined are already OR-ed together, the
+   * shared percussion layer is already merged into the factory rhythms, and
+   * the mask is the one the selection plays on.
+   */
   private buildPattern(): CardPattern | null {
-    const views = this.applied
-      .map((rhythm) => this.views.get(rhythm))
-      .filter((view): view is PatternView => view !== undefined);
+    const view = this.view;
 
-    if (views.length === 0 && this.percussion.length === 0) {
+    if (view === null) {
       return null;
     }
 
     const notes: number[] = new Array<number>(PATTERN_COLUMNS).fill(0);
     const accents: boolean[] = new Array<boolean>(PATTERN_COLUMNS).fill(false);
-    let enable = ENABLE_ALL;
-    let compound = false;
-    let timesig = -1;
-    let mixed = false;
 
-    for (const view of views) {
-      const period = view.notesPeriod;
-      if (period > 0) {
-        for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
-          const noteMask = view.notes[column & (period - 1)] ?? 0;
-          notes[column] = (notes[column] ?? 0) | noteMask;
-          // The accent flag rides in the highest bit of the column.
-          if ((noteMask & PATTERN_ACCENT_BIT) !== 0) {
-            accents[column] = true;
-          }
-        }
-      }
-      const mask =
-        (BigInt(view.enableHi >>> 0) << 32n) | BigInt(view.enableLo >>> 0);
-      enable &= mask;
-      // The grid of the selection is the compound one as soon as one of
-      // the patterns plays on it, the way the engine combines them.
-      compound = compound || view.compound;
-      if (view.timesig >= 0) {
-        if (timesig < 0) {
-          timesig = view.timesig;
-        } else if (timesig !== view.timesig) {
-          mixed = true;
-        }
+    for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
+      const noteMask = view.notes[column] ?? 0;
+
+      notes[column] = noteMask;
+      // The accent flag rides in the highest bit of the column.
+      if ((noteMask & PATTERN_ACCENT_BIT) !== 0) {
+        accents[column] = true;
       }
     }
 
-    // The shared percussion layer plays with every rhythm.
-    if (this.percussionPeriod > 0) {
-      for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
-        notes[column] =
-          (notes[column] ?? 0) |
-          (this.percussion[column & (this.percussionPeriod - 1)] ?? 0);
-      }
-    }
+    const enable =
+      (BigInt(view.enableHi >>> 0) << 32n) | BigInt(view.enableLo >>> 0);
 
     const voices: number[] = [];
     for (let instrument = 0; instrument < INSTRUMENT_NAMES.length; instrument += 1) {
@@ -738,9 +718,13 @@ export class PatternGrid {
       rhythms: [...this.applied],
       notes,
       enable,
-      compound,
-      timesig,
-      mixed,
+      // The grid of the selection is the compound one as soon as one of the
+      // patterns plays on it, the way the engine combines them.
+      compound: view.compound,
+      timesig: view.timesig,
+      // A selection of patterns with different meters carries no meter of
+      // its own, and the control says so.
+      mixed: view.timesig < 0,
       rows,
       voices,
       accents,

@@ -86,11 +86,11 @@ export class PoppyEngine {
   private errorListeners = new Set<(message: string) => void>();
   private pending: EngineCommand[] = [];
   private patternRequests = new Map<
-    number,
+    string,
     { resolve: (view: PatternView) => void; reject: (reason: Error) => void }
   >();
-  private patternCache = new Map<number, PatternView>();
-  private patternPending = new Map<number, Promise<PatternView>>();
+  private patternCache = new Map<string, PatternView>();
+  private patternPending = new Map<string, Promise<PatternView>>();
   private userPatternRequests = new Map<
     number,
     { resolve: (pattern: UserPattern) => void; reject: (reason: Error) => void }
@@ -290,33 +290,42 @@ export class PoppyEngine {
     this.wake();
   }
 
-  getPattern(rhythm: number): Promise<PatternView> {
-    const cached = this.patternCache.get(rhythm);
+  /**
+   * The view of a selection: the grid of the cycle, every voice of it.
+   *
+   * The engine composes the selection, so the panel does not have to know
+   * that the notes are OR-ed together, that the masks are AND-ed, or that
+   * the shared percussion layer plays with every factory rhythm. The same
+   * call serves a selection of one rhythm and a selection of several.
+   */
+  getPattern(bank: Bank, buttons: number): Promise<PatternView> {
+    const key = `${bank}:${buttons}`;
+    const cached = this.patternCache.get(key);
     if (cached !== undefined) {
       return Promise.resolve(cached);
     }
 
-    const inflight = this.patternPending.get(rhythm);
+    const inflight = this.patternPending.get(key);
     if (inflight !== undefined) {
       return inflight;
     }
 
     const request = new Promise<PatternView>((resolve, reject) => {
-      this.patternRequests.set(rhythm, { resolve, reject });
-      this.post({ type: 'pattern', rhythm });
+      this.patternRequests.set(key, { resolve, reject });
+      this.post({ type: 'pattern', bank, buttons });
       this.wake();
     })
       .then((view) => {
-        this.patternCache.set(rhythm, view);
-        this.patternPending.delete(rhythm);
+        this.patternCache.set(key, view);
+        this.patternPending.delete(key);
         return view;
       })
       .catch((error: unknown) => {
-        this.patternPending.delete(rhythm);
+        this.patternPending.delete(key);
         throw error;
       });
 
-    this.patternPending.set(rhythm, request);
+    this.patternPending.set(key, request);
     return request;
   }
 
@@ -547,9 +556,12 @@ export class PoppyEngine {
         }
         break;
       case 'pattern': {
-        const handlers = this.patternRequests.get(event.view.rhythm);
+        // The answer carries the selection it belongs to, so a request that
+        // is overtaken by another one still finds its own answer.
+        const key = `${event.bank}:${event.buttons}`;
+        const handlers = this.patternRequests.get(key);
         if (handlers !== undefined) {
-          this.patternRequests.delete(event.view.rhythm);
+          this.patternRequests.delete(key);
           handlers.resolve(event.view);
         }
         break;

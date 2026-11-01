@@ -28,7 +28,7 @@ import {
 export const BANK_FILE_FORMAT = 'poppy-web.bank';
 
 /** The version of the format this build reads and writes. */
-export const BANK_FILE_VERSION = 5;
+export const BANK_FILE_VERSION = 6;
 
 /** The number of rhythms a bank holds. */
 export const BANK_PATTERN_COUNT = 10;
@@ -52,8 +52,6 @@ export interface BankFilePattern {
    * from it, so the file does not carry a mask of its own.
    */
   meter: string;
-  /** The length of the repeating part of the cycle. */
-  period: number;
 }
 
 /** A whole bank of rhythms, as it is written in the file. */
@@ -92,7 +90,6 @@ export function patternToFile(
     name,
     steps: pattern.notes.map((note) => (note ?? 0) & 0xffff),
     meter: labelOfTimesig(pattern.timesig),
-    period: pattern.period,
   };
 }
 
@@ -105,20 +102,7 @@ export function patternFromFile(pattern: BankFilePattern): UserPattern {
   return {
     notes: pattern.steps.map((step) => step & 0xffff),
     timesig,
-    period: pattern.period,
   };
-}
-
-function isPeriod(value: unknown): value is number {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    return false;
-  }
-  if (value < 1 || value > PATTERN_COLUMNS) {
-    return false;
-  }
-  // The cycle repeats the pattern every `period` columns, so the period
-  // has to divide the cycle in whole steps.
-  return (value & (value - 1)) === 0;
 }
 
 /**
@@ -159,7 +143,7 @@ function isBankFilePattern(value: unknown): value is BankFilePattern {
   if (timesigOfLabel(pattern.meter) === null) {
     return false;
   }
-  return isPeriod(pattern.period);
+  return true;
 }
 
 /**
@@ -213,7 +197,6 @@ export function parseBankFile(text: string): BankFile {
       name: pattern.name,
       steps: [...pattern.steps],
       meter: pattern.meter,
-      period: pattern.period,
     })),
   };
 }
