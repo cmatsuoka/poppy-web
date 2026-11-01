@@ -2723,9 +2723,6 @@ export class Panel {
       // by the legend, not by a burning lamp.
       this.clearFlash();
       this.setLamps(null);
-    } else if (this.reducedMotion.matches) {
-      this.clearFlash();
-      this.setLamps(state.bank);
     } else if (state.flashCount !== this.lastFlash) {
       this.flash(state.bank);
     } else if (!wasRunning) {

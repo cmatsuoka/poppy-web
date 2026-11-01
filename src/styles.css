@@ -2231,13 +2231,12 @@ body {
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
   }
 
-  /* A waiting marker does not pulse without motion: it stays dimmed, so
-     it still reads as a selection that has not started yet. */
-  .rhythm-key[aria-pressed='true'].is-pending .key-tick {
-    animation: none;
-    opacity: 0.45;
+  /* The lamp keeps its fade. The flash of the lamp and the pulse of the
+     waiting marker carry the state of the machine and are not decoration:
+     they run whatever the system asks for. */
+  .lamp::after {
+    transition-duration: 90ms !important;
   }
 }
