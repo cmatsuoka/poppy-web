@@ -210,6 +210,11 @@ export class PoppyEngine {
     this.wake();
   }
 
+  /**
+   * Instrument gains range from 0.0x to 2.0x.
+   *
+   * 1.0x corresponds to the default levels in classic mode (Q16 65536).
+   */
   setInstrumentGain(instrument: number, value: number): void {
     if (instrument < 0 || instrument >= this.settings.instrGain.length) {
       return;

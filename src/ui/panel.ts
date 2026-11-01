@@ -21,6 +21,7 @@ import { FitScaler } from './fit';
 import {
   ControlWriter,
   loadControlPositions,
+  MEMORIES_VERSION,
   type ControlPositions,
 } from './control-store';
 import { PatternGrid, rhythmsFor } from './pattern-grid';
@@ -72,24 +73,11 @@ const PANEL_KNOBS = 8;
 const BAND_MEMORY_COUNT = 4;
 
 /**
- * The settings the knobs of the band come up in, for the memory positions.
- *
- * A memory position keeps the settings of the knobs, and a position that
- * was not written comes up with the settings that belong to it. Every
- * position comes up with the settings the machine comes up with: the
- * engine has one set of settings, and the panel has no other.
- *
- * The user may write over them: a knob that is turned writes into the
- * position that is selected, and the settings the position is given are
- * kept in the browser.
- */
-const BAND_MEMORY_DEFAULTS: Record<string, number>[] = [];
-
-/**
  * The knobs of the band that have a function.
  *
- * Every one of them stands where the engine stands when it comes up, so
- * the machine sounds the same until a knob is moved.
+ * Every one of them has two values: the default value, which is the setting
+ * the machine comes up with, and the seeded value, which is the setting the
+ * first memory position is given when the machine comes up.
  */
 interface BandKnob {
   /**
@@ -108,8 +96,17 @@ interface BandKnob {
   min: number;
   /** The largest value the knob takes. */
   max: number;
-  /** The value the knob stands at when the machine comes up. */
-  value: number;
+  /**
+   * The default value: the setting the machine comes up with, and the
+   * value the reset button puts a knob back to.
+   */
+  defaultValue: number;
+  /**
+   * The seeded value: the setting the first memory position is given
+   * when the machine comes up. It is the value the position starts with,
+   * and a knob that is turned writes over it.
+   */
+  seedValue: number;
   /** What the value is called. */
   valueText: (value: number) => string;
   /** Whether the knob reads out its value. */
@@ -124,9 +121,13 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'accent',
       label: 'ACCENT',
       ariaLabel: 'Accent gain',
+      // The knob reaches below the level the accented columns come
+      // with: it starts at 1.0, where an accented column is played
+      // like the rest of it, and the machine comes up with 1.20.
       min: 1,
       max: 2,
-      value: 1.2,
+      defaultValue: 1.2,
+      seedValue: 1.4,
       valueText: (value) => `${value.toFixed(2)}x`,
       onInput: (value) => {
         engine.setAccentGain(Math.round(value * Q16));
@@ -136,10 +137,14 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'sn1-vol',
       label: 'SN1 VOL',
       ariaLabel: 'Snare 1 level',
+      // The engine takes the level of a voice from silence to twice the
+      // level the original unit plays it at, so the knob stands between
+      // 0 and 2, with the original level in the middle.
       min: 0,
-      max: 1,
-      value: 1,
-      valueText: (value) => `${Math.round(value * 100)}%`,
+      max: 2,
+      defaultValue: 1,
+      seedValue: 1,
+      valueText: (value) => `${value.toFixed(2)}x`,
       onInput: (value) => {
         engine.setInstrumentGain(INSTR_SNARE_1, Math.round(value * Q16));
       },
@@ -148,9 +153,12 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'sn1-decay',
       label: 'SN1 DECAY',
       ariaLabel: 'Snare 1 decay',
-      min: 100,
-      max: 1600,
-      value: 400,
+      // The decay of the original unit is 400 ms, and it stands in the
+      // middle of the knob: the knob reaches half of it and twice it.
+      min: 200,
+      max: 600,
+      defaultValue: 400,
+      seedValue: 350,
       valueText: (value) => `${Math.round(value)} ms`,
       onInput: (value) => {
         // The engine takes the decay as a multiplier of the factory decay,
@@ -164,9 +172,12 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'sn1-cutoff',
       label: 'SN1 CUTOFF',
       ariaLabel: 'Snare 1 cutoff',
+      // The cut-off of the original unit is 5.5 kHz, and it stands in the
+      // middle of the knob.
       min: 1000,
-      max: 15000,
-      value: 5500,
+      max: 10000,
+      defaultValue: 5500,
+      seedValue: 5500,
       valueText: (value) => `${(value / 1000).toFixed(1)} kHz`,
       onInput: (value) => {
         engine.setSnare1Cutoff(Math.round(value));
@@ -176,10 +187,13 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'hh-vol',
       label: 'HH VOL',
       ariaLabel: 'Hi-hat level',
+      // Silence to twice the level of the original unit, with the level
+      // of the original unit in the middle.
       min: 0,
-      max: 1,
-      value: 1,
-      valueText: (value) => `${Math.round(value * 100)}%`,
+      max: 2,
+      defaultValue: 1,
+      seedValue: 1,
+      valueText: (value) => `${value.toFixed(2)}x`,
       onInput: (value) => {
         engine.setInstrumentGain(INSTR_HIHAT, Math.round(value * Q16));
       },
@@ -188,10 +202,16 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'hh-cutoff',
       label: 'HH CUTOFF',
       ariaLabel: 'Hi-hat cutoff',
+      // The cut-off of the original unit is 1 kHz, and it stands in the
+      // middle of the knob: the knob reaches half of it and 1.5 times it.
+      // The engine takes nothing below 500 Hz, so the knob does not go
+      // lower than that.
       min: 500,
-      max: 15000,
-      value: 1000,
-      valueText: (value) => `${(value / 1000).toFixed(1)} kHz`,
+      max: 1500,
+      defaultValue: 1000,
+      seedValue: 1400,
+      valueText: (value) =>
+        value < 1000 ? `${Math.round(value)} Hz` : `${(value / 1000).toFixed(1)} kHz`,
       onInput: (value) => {
         engine.setHihatCutoff(Math.round(value));
       },
@@ -200,10 +220,13 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'perc-vol',
       label: 'PERC VOL',
       ariaLabel: 'Percussion level',
+      // Silence to twice the level of the original unit, with the level
+      // of the original unit in the middle.
       min: 0,
-      max: 1,
-      value: 1,
-      valueText: (value) => `${Math.round(value * 100)}%`,
+      max: 2,
+      defaultValue: 1,
+      seedValue: 0.75,
+      valueText: (value) => `${value.toFixed(2)}x`,
       onInput: (value) => {
         // The knob moves the whole group of percussion at once: the small
         // bongo, the large bongo, the conga, the cowbell, the claves and
@@ -220,7 +243,8 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       ariaLabel: 'Stereo spread of the instruments',
       min: -1,
       max: 1,
-      value: 0,
+      defaultValue: 0,
+      seedValue: 0,
       valueText: (value) => {
         const percent = Math.round(Math.abs(value) * 100);
         if (percent === 0) {
@@ -236,6 +260,27 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       },
     },
   ];
+}
+
+/**
+ * The values the first memory position of the knobs is seeded with.
+ *
+ * The first position is seeded with the seeded values of the knobs: the
+ * accent at 1.40, the snare 1 at 1.00, at 350 ms and at 5.5 kHz, the
+ * hi-hat at 1.00 and at 1.4 kHz and the percussion at 0.75. The other
+ * three positions have no seeded values and come up with the default
+ * values of the knobs.
+ *
+ * The seed is only the value the position is given at the start: a knob
+ * that is turned writes over it, and the reset button puts the position
+ * back to the default values and the seed is lost.
+ */
+function bandMemorySeed(knobs: BandKnob[]): Record<string, number> {
+  const seeded: Record<string, number> = {};
+  for (const knob of knobs) {
+    seeded[knob.id] = knob.seedValue;
+  }
+  return seeded;
 }
 
 /**
@@ -953,9 +998,22 @@ export class Panel {
 
   /** The knobs of the band, and the positions they come up in. */
   private readonly bandControls: MiniKnob[] = [];
+  /**
+   * What every knob of the band does.
+   *
+   * The engine is told through the knob itself, and it has to be told
+   * even when the knob does not move.
+   */
+  private readonly bandKnobs: BandKnob[] = [];
   /** The names of the knobs of the band, in the order of the row. */
   private readonly bandIds: string[] = [];
-  /** The positions the knobs of the band come up in, by name. */
+  /**
+   * The default values of the knobs of the band, by name.
+   *
+   * They are the settings the machine comes up with, the factory rhythms
+   * are played with them, and the reset button of the band puts the knobs
+   * of the selected position back to them.
+   */
   private readonly bandDefaults: Record<string, number> = {};
   /**
    * The settings the knobs of the band stand at.
@@ -1185,7 +1243,8 @@ export class Panel {
         ariaLabel: `Knob ${index + 1}, no function yet`,
         min: 0,
         max: 1,
-        value: 0.5,
+        defaultValue: 0.5,
+        seedValue: 0.5,
         valueText: (value) => `${Math.round(value * 100)} percent`,
         showReadout: false,
         onInput: () => {
@@ -1195,11 +1254,12 @@ export class Panel {
     }
 
     knobs.forEach((knob) => {
+      this.bandKnobs.push(knob);
       const control = new MiniKnob({
         label: knob.label,
         min: knob.min,
         max: knob.max,
-        value: knob.value,
+        value: knob.seedValue,
         ariaLabel: knob.ariaLabel,
         valueText: knob.valueText,
         showReadout: knob.showReadout ?? true,
@@ -1215,7 +1275,7 @@ export class Panel {
       });
       this.bandControls.push(control);
       this.bandIds.push(knob.id);
-      this.bandDefaults[knob.id] = knob.value;
+      this.bandDefaults[knob.id] = knob.defaultValue;
       strip.append(control.element);
     });
 
@@ -1228,33 +1288,36 @@ export class Panel {
     const storedMemory = this.savedControls.memory ?? 0;
     this.bandMemory =
       storedMemory >= 0 && storedMemory < BAND_MEMORY_COUNT ? storedMemory : 0;
+    // The values the first position is seeded with. The other three
+    // positions have no seeded values and come up with the defaults.
+    const seed = bandMemorySeed(knobs);
     for (let index = 0; index < BAND_MEMORY_COUNT; index += 1) {
-      // The settings the position comes up in: the ones that belong to it,
-      // or the ones the machine comes up with.
-      const defaults: Record<string, number> = { ...this.bandDefaults };
-      Object.assign(defaults, BAND_MEMORY_DEFAULTS[index] ?? {});
-
       const position: Record<string, number> = {};
       const stored = storedMemories[index] ?? {};
-      for (const id of this.bandIds) {
-        const fallback = defaults[id];
-        if (fallback !== undefined) {
-          position[id] = stored[id] ?? fallback;
+      this.bandIds.forEach((id, knobIndex) => {
+        // A setting the user gave is kept, and a position that was never
+        // written comes up with the value it is given: the seeded value
+        // of the first position, and the default value of the others.
+        const fallback =
+          (index === 0 ? seed[id] : undefined) ?? this.bandDefaults[id];
+        if (fallback === undefined) {
+          return;
         }
-      }
+        const knob = this.bandKnobs[knobIndex];
+        const value = stored[id] ?? fallback;
+        // A value the browser kept from a machine with other ranges is
+        // brought back into the range of the knob.
+        position[id] = knob
+          ? clamp(value, knob.min, knob.max)
+          : value;
+      });
       this.bandMemories.push(position);
     }
-    // A machine that was left before the memory positions existed keeps
-    // the settings it had: they belong to the position that is selected.
-    if (storedMemories.length === 0) {
-      const stored = this.savedControls.band ?? {};
-      for (const id of this.bandIds) {
-        const value = stored[id];
-        if (value !== undefined) {
-          this.bandValues[id] = value;
-        }
-      }
-    }
+    // The knobs stand where the settings of the selected position say.
+    // The engine is not told: the machine comes up in the classic mode,
+    // and the factory rhythms are played with the settings the machine
+    // comes up with.
+    this.applyBandPositions(this.bandValues);
 
     // The square of memory positions, and the button that puts the knobs
     // of the selected position back. They stand at the end of the row,
@@ -1279,10 +1342,11 @@ export class Panel {
     tail.append(memories);
 
     // The button that puts the knobs of the selected memory position back
-    // where they come up in.
+    // to their default values.
     const reset = element('button', 'write-strip-reset');
     reset.type = 'button';
-    reset.title = 'Put the knobs of the selected memory position back';
+    reset.title =
+      'Put the knobs of the selected memory position back to the defaults';
     reset.setAttribute('aria-label', reset.title);
     reset.append(resetIcon('write-strip-reset-icon'));
     reset.addEventListener('click', () => {
@@ -1331,19 +1395,36 @@ export class Panel {
    * with, and the user patterns with the settings of the memory position
    * that is selected. The positions the user chose are kept either way:
    * the mode lever does not throw them away.
+   *
+   * The engine takes the settings whether the knobs stand at them or not:
+   * a knob that already stands where the settings say does not tell the
+   * engine anything by itself, and the settings still have to reach it.
    */
   private applyBandValues(values: Record<string, number>): void {
-    this.restoring = true;
-    try {
-      this.bandIds.forEach((id, index) => {
-        const value = values[id];
-        if (value !== undefined) {
-          this.bandControls[index]?.set(value, true);
-        }
-      });
-    } finally {
-      this.restoring = false;
-    }
+    this.bandIds.forEach((id, index) => {
+      const value = values[id];
+      if (value !== undefined) {
+        this.bandKnobs[index]?.onInput(value);
+      }
+    });
+    // The knobs stand where the settings say.
+    this.applyBandPositions(values);
+  }
+
+  /**
+   * Move the knobs of the band to the settings they are given.
+   *
+   * The engine is not told: the knobs are put where a position says they
+   * stand, and the engine keeps the settings it has until the source
+   * changes.
+   */
+  private applyBandPositions(values: Record<string, number>): void {
+    this.bandIds.forEach((id, index) => {
+      const value = values[id];
+      if (value !== undefined) {
+        this.bandControls[index]?.set(value, false);
+      }
+    });
   }
 
   /**
@@ -1400,19 +1481,23 @@ export class Panel {
     this.controlWriter.update({
       tempo: this.tempoKnob.current,
       faders: this.faders.map((fader) => fader.current),
-      band: { ...this.bandValues },
+      memoriesVersion: MEMORIES_VERSION,
       memories: this.bandMemories.map((memory) => ({ ...memory })),
       memory: this.bandMemory,
     });
   }
 
   /**
-   * Put the knobs of the selected memory position back where they belong.
+   * Put the knobs of the selected memory position back to their defaults.
    *
    * The square button at the end of the band does it: it is the only way
-   * back to the positions the machine comes up in. Only the position that
+   * back to the settings the machine comes up with. Only the position that
    * is selected is put back; the other ones keep the settings they were
    * given.
+   *
+   * The reset puts the defaults back and not the seeded values: a seed is
+   * only the value a position starts with, and it is lost when the
+   * position is put back.
    */
   private resetKnobs(): boolean {
     const values = this.bandValues;
@@ -1423,9 +1508,12 @@ export class Panel {
         this.bandControls[index]?.set(fallback, true);
       }
     });
+    // The defaults are written to the browser, so the seeded values of the
+    // position are lost: it comes up with the defaults from now on, and
+    // not with the values it was seeded with.
     this.keepControlPositions();
     this.showStatus(
-      `The knobs of memory ${this.bandMemory + 1} are back where they belong`,
+      `The knobs of memory ${this.bandMemory + 1} are back at the defaults`,
       false,
     );
     return true;
@@ -1452,6 +1540,11 @@ export class Panel {
       target: 'balance' | 'volume' | 'gain';
       scale: 'right' | 'left' | 'end' | 'pair-end';
     }> = [
+      // The three blue faders are the Additional Volume faders of the
+      // machine: they move the tambourine, the guiro and the quijada.
+      // Their top is the top of the fader of the original unit, so they
+      // reach 1.0 and no further, and they come up in the middle of the
+      // fader, at 0.5.
       {
         label: 'Quijada',
         color: 'blue',

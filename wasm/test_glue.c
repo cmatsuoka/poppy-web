@@ -350,6 +350,17 @@ int main(void)
     render(ctx, snare, 20480);
     check(peak(snare, 20480) > 0, "the snare is heard");
 
+    /* A voice can be played louder than the level it comes up with: the
+     * level knobs of the band go up to twice that level. */
+    static int16_t loud[20480];
+
+    prepare_pattern(ctx, 9, snare_notes);
+    poppy_set_instr_gain(ctx, MP7_INSTR_SNARE_1, 2 * 65536);
+    render(ctx, loud, 20480);
+    check(peak(loud, 20480) > peak(snare, 20480),
+          "a voice at twice its level is louder");
+    poppy_set_instr_gain(ctx, MP7_INSTR_SNARE_1, 65536);
+
     prepare_pattern(ctx, 9, snare_notes);
     poppy_set_instr_gain(ctx, MP7_INSTR_SNARE_1, 0);
     render(ctx, muted, 20480);

@@ -4,8 +4,8 @@
  * The five faders, the tempo knob and the knobs of the band are the
  * settings of the machine: where they stand is how the user left them.
  * They are kept in the browser, so the machine comes up the way it was
- * left, and the reset button of the pattern editor puts the knobs of the
- * band back where they belong.
+ * left, and the reset button of the band puts the knobs of the selected
+ * memory position back to their default values.
  *
  * The knobs of the band live in four memory positions: the position that
  * is selected is the one the knobs stand at, and it is the one the reset
@@ -18,7 +18,17 @@
  * is written once and not on every step of the turn.
  */
 
-const STORAGE_KEY = 'poppy-web.controls.v1';
+const STORAGE_KEY = 'poppy-web.controls.v2';
+
+/**
+ * The version of the memory positions of the band of knobs.
+ *
+ * The positions are read back only when they carry this version: the
+ * ranges of the knobs and the values the positions are given changed
+ * with it, and the positions of an older machine mean something else.
+ * The tempo and the faders do not depend on it, and they are kept.
+ */
+export const MEMORIES_VERSION = 2;
 
 /** How long the controls have to stand still before they are written. */
 const WRITE_DELAY = 500;
@@ -29,19 +39,21 @@ export interface ControlPositions {
   /** The position of the five faders, in the order of the panel. */
   faders?: number[];
   /**
-   * The position of the knobs of the band, by the name of the knob.
+   * The version of the memory positions of the band of knobs.
    *
-   * The knobs are told apart by their name and not by their place in the
-   * row, so a knob that changes its function does not come up with the
-   * position of the knob that stood there before.
+   * The positions are read back only when they carry the version the
+   * panel writes today.
    */
-  band?: Record<string, number>;
+  memoriesVersion?: number;
   /**
    * The memory positions of the band of knobs.
    *
-   * Every position keeps the settings of the knobs the way `band` does,
-   * by the name of the knob. A position that was not there at the last
-   * visit comes up with the settings the machine comes up with.
+   * Every position keeps the settings of the knobs by the name of the
+   * knob, so a knob that changes its function does not come up with the
+   * position of the knob that stood there before. A position that was not
+   * there at the last visit comes up with the values it is given: the
+   * seeded values of the first position, and the default values of the
+   * others.
    */
   memories?: Record<string, number>[];
   /** The memory position of the band that is selected. */
@@ -105,10 +117,14 @@ export function loadControlPositions(): ControlPositions {
   if (isNumbers(record.faders)) {
     positions.faders = record.faders;
   }
-  if (isNumberRecord(record.band)) {
-    positions.band = record.band;
-  }
-  if (isNumberRecordArray(record.memories)) {
+  // The memory positions are read back only when they carry the version
+  // the panel writes today: the positions of an older machine mean
+  // something else, and the ranges of the knobs have changed with them.
+  if (
+    record.memoriesVersion === MEMORIES_VERSION &&
+    isNumberRecordArray(record.memories)
+  ) {
+    positions.memoriesVersion = MEMORIES_VERSION;
     positions.memories = record.memories;
   }
   if (
