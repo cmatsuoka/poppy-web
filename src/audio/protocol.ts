@@ -76,7 +76,7 @@ export const RHYTHM_BUTTON_COUNT = 10;
 export const ADVANCED_NAMES = [
   'CALYPSO',
   'REGGAE',
-  'JAZZ 1',
+  'BLUES',
   'JAZZ 5/4 1',
   'DISCO 1',
   '70S GERMAN',
@@ -86,7 +86,7 @@ export const ADVANCED_NAMES = [
   '80S POP 1',
   'BOLERO',
   'MONTUNO',
-  'JAZZ 2',
+  'JAZZ',
   'JAZZ 5/4 2',
   'DISCO 2',
   '70S FRENCH',
