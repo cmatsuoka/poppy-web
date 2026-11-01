@@ -1449,7 +1449,7 @@ export class Panel {
       this.applyBandValues(this.bandValues);
     }
     this.keepControlPositions();
-    this.showStatus(`The knobs of memory ${index + 1} are in place`, false);
+    this.showStatus(`Recovered memory position ${index + 1}`, false);
   }
 
   /**
@@ -1514,7 +1514,7 @@ export class Panel {
     // not with the values it was seeded with.
     this.keepControlPositions();
     this.showStatus(
-      `The knobs of memory ${this.bandMemory + 1} are back at the defaults`,
+      `Memory position ${this.bandMemory + 1} reset to the default values`,
       false,
     );
     return true;

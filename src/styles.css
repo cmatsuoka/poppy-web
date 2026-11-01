@@ -24,7 +24,7 @@
   /* The size of a button of the memory positions of the band of knobs.
      The square of the four buttons and the reset button next to it are
      both built from it. */
-  --memory-size: clamp(14px, 1.5vw, 19px);
+  --memory-size: clamp(18px, 2vw, 26px);
   /* The chrome of the levers: a hot band along the top, the dark band the
      horizon leaves across the middle and the bounce light along the
      bottom. */
