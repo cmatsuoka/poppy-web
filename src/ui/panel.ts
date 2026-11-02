@@ -242,7 +242,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       min: -1,
       max: 1,
       defaultValue: 0,
-      seedValue: 0,
+      seedValue: 0.5,
       valueText: (value) => {
         const percent = Math.round(Math.abs(value) * 100);
         if (percent === 0) {
@@ -265,7 +265,8 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
  *
  * The first position is seeded with the seeded values of the knobs: the
  * accent at 1.40, the snare 1 at 1.00, at 350 ms and at 5.5 kHz, the
- * hi-hat at 1.00 and at 1.4 kHz and the percussion at 0.75. The other
+ * hi-hat at 1.00 and at 1.4 kHz, the percussion at 0.75 and the pan
+ * spread at +50%. The other
  * three positions have no seeded values and come up with the default
  * values of the knobs.
  *
