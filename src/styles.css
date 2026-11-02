@@ -2003,6 +2003,11 @@ body {
   border-color: rgb(35 35 42 / 55%);
 }
 
+.pattern-card-meter-select:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .pattern-card-meter-select:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
@@ -2011,6 +2016,13 @@ body {
 /* The meter of the pattern is printed like the other flags of the card. */
 .pattern-flag--meter {
   border-color: rgb(35 35 42 / 40%);
+  color: var(--ink);
+  opacity: 0.9;
+}
+
+/* A pattern the engine composes from several rhythms: it is a display. */
+.pattern-flag--combined {
+  border-color: rgb(35 35 42 / 55%);
   color: var(--ink);
   opacity: 0.9;
 }

@@ -71,6 +71,8 @@ const MAX_SPOKEN_COLUMNS = 16;
 
 interface CardPattern {
   rhythms: number[];
+  /** More than one rhythm is latched: the pattern is a combination. */
+  combined: boolean;
   notes: number[];
   enable: bigint;
   /** The grid the pattern plays on: the compound one or the straight one. */
@@ -259,6 +261,21 @@ export class PatternGrid {
    * compact print.
    */
   private expanded = false;
+
+  /** Whether there is something to paste. */
+  private hasClipboard = false;
+
+  /**
+   * Whether the card prints a combination of rhythms.
+   *
+   * A combined pattern is composed by the engine from several rhythms, so
+   * it is a display and cannot be written on: the tools that change or
+   * keep the pattern are disabled. The two tools of the bank, import and
+   * export, still work, because a bank is read and written whole.
+   */
+  private isCombined(): boolean {
+    return this.applied.length > 1;
+  }
 
   private showsAllVoices(): boolean {
     return this.expanded && this.source === PATTERN_SOURCE_USER;
@@ -573,7 +590,27 @@ export class PatternGrid {
 
   /** Tell the card whether there is something to paste. */
   setClipboard(hasContent: boolean): void {
-    this.pasteButton.disabled = !hasContent;
+    this.hasClipboard = hasContent;
+    this.syncToolAvailability();
+  }
+
+  /**
+   * Enable the tools of the bar that can work on the card as it stands.
+   *
+   * A combined pattern is a display, so only the two tools of the bank are
+   * left: a bank is read and written whole, and a combination of rhythms
+   * says nothing about the bank it is part of.
+   */
+  private syncToolAvailability(): void {
+    const extended = this.source === PATTERN_SOURCE_USER;
+    const combined = this.isCombined();
+    this.clearButton.disabled = !extended || combined;
+    this.copyButton.disabled = !extended || combined;
+    this.pasteButton.disabled = !extended || combined || !this.hasClipboard;
+    this.saveButton.disabled = !extended || combined;
+    this.importButton.disabled = !extended;
+    this.exportButton.disabled = !extended;
+    this.meterSelect.disabled = !extended || combined;
   }
 
   /** One of the buttons of the bar. */
@@ -710,6 +747,7 @@ export class PatternGrid {
 
     return {
       rhythms: [...this.applied],
+      combined: this.applied.length > 1,
       notes,
       enable,
       // The grid of the selection is the compound one as soon as one of the
@@ -741,7 +779,10 @@ export class PatternGrid {
 
   private renderNames(): void {
     const user = this.source === PATTERN_SOURCE_USER;
-    const signature = `${user ? 'user' : 'preset'}:${this.applied.join(',')}`;
+    // A combined pattern belongs to no single slot, so its names are
+    // printed and not written.
+    const writable = user && !this.isCombined();
+    const signature = `${user ? 'user' : 'preset'}:${writable ? 'write' : 'print'}:${this.applied.join(',')}`;
 
     if (signature !== this.nameSignature) {
       this.nameSignature = signature;
@@ -749,7 +790,9 @@ export class PatternGrid {
       this.nameNodes = [];
 
       for (const rhythm of this.applied) {
-        const node = user ? this.buildNameField(rhythm) : this.buildNameText(rhythm);
+        const node = writable
+          ? this.buildNameField(rhythm)
+          : this.buildNameText(rhythm);
         this.nameRow.append(node);
         this.nameNodes.push({ rhythm, node });
       }
@@ -1023,7 +1066,7 @@ export class PatternGrid {
    * The cursor: the step of the grid the keyboard is on.
    */
   private renderCursor(pattern: CardPattern): void {
-    if (this.source !== PATTERN_SOURCE_USER) {
+    if (this.source !== PATTERN_SOURCE_USER || this.isCombined()) {
       this.cursorLayer.setAttribute('display', 'none');
       return;
     }
@@ -1045,7 +1088,7 @@ export class PatternGrid {
    * extended mode, where the keyboard walks over it.
    */
   private updateAria(pattern: CardPattern): void {
-    if (this.source === PATTERN_SOURCE_USER) {
+    if (this.source === PATTERN_SOURCE_USER && !this.isCombined()) {
       this.svg.setAttribute('role', 'group');
       this.svg.setAttribute('tabindex', '0');
       // The name of the grid is the step the cursor is on, so a screen
@@ -1078,6 +1121,7 @@ export class PatternGrid {
     if (extended) {
       this.syncMeter();
     }
+    this.syncToolAvailability();
   }
 
   /**
@@ -1159,7 +1203,7 @@ export class PatternGrid {
 
   /** A click puts a voice into a step, or takes it out again. */
   private onGridClick(event: MouseEvent): void {
-    if (this.source !== PATTERN_SOURCE_USER) {
+    if (this.source !== PATTERN_SOURCE_USER || this.isCombined()) {
       return;
     }
     const cell = this.cellAt(event.clientX, event.clientY);
@@ -1175,7 +1219,11 @@ export class PatternGrid {
   /** The keyboard walks over the grid. */
   private onGridKeyDown(event: KeyboardEvent): void {
     const pattern = this.pattern;
-    if (pattern === null || this.source !== PATTERN_SOURCE_USER) {
+    if (
+      pattern === null ||
+      this.source !== PATTERN_SOURCE_USER ||
+      this.isCombined()
+    ) {
       return;
     }
 
@@ -1233,7 +1281,7 @@ export class PatternGrid {
    */
   private toggleCell(): void {
     const pattern = this.pattern;
-    if (pattern === null) {
+    if (pattern === null || this.isCombined()) {
       return;
     }
     const column = this.cursorColumn;
@@ -1483,6 +1531,15 @@ export class PatternGrid {
       user.className = 'pattern-flag pattern-flag--user';
       user.textContent = 'USER';
       this.metaRow.append(user);
+
+      if (this.pattern.combined) {
+        const combined = document.createElement('span');
+        combined.className = 'pattern-flag pattern-flag--combined';
+        combined.textContent = 'COMBINED';
+        combined.title =
+          'A combination of rhythms is a display and cannot be written on';
+        this.metaRow.append(combined);
+      }
 
       // The meter of the pattern: the time signature it carries.
       if (this.pattern.mixed) {

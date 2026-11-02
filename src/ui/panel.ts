@@ -2237,6 +2237,9 @@ export class Panel {
     if (this.displayedSource() !== PATTERN_SOURCE_USER) {
       return;
     }
+    if (this.selectionIsCombined()) {
+      return;
+    }
 
     const slots = rhythmsFor(this.state.bank, this.state.buttons);
     for (const slot of slots) {
@@ -2275,6 +2278,9 @@ export class Panel {
    */
   private async writeTimesig(timesig: TimeSignature): Promise<void> {
     if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+      return;
+    }
+    if (this.selectionIsCombined()) {
       return;
     }
 
@@ -2337,6 +2343,16 @@ export class Panel {
   }
 
   /**
+   * Whether the selection combines several rhythms.
+   *
+   * The engine composes a combined pattern from the rhythms that are
+   * latched, so it is a display and not a pattern that can be written on.
+   */
+  private selectionIsCombined(): boolean {
+    return this.selectionSlots().length > 1;
+  }
+
+  /**
    * Copy the pattern of the selection to the clipboard.
    *
    * The clipboard is a temporary one and it holds the notes of the
@@ -2344,7 +2360,10 @@ export class Panel {
    * pasted comes back the way it was.
    */
   private async copyPattern(): Promise<boolean> {
-    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+    if (
+      this.displayedSource() !== PATTERN_SOURCE_USER ||
+      this.selectionIsCombined()
+    ) {
       return false;
     }
 
@@ -2385,7 +2404,10 @@ export class Panel {
    * does: it is written into every user pattern that is latched.
    */
   private async pastePattern(): Promise<boolean> {
-    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+    if (
+      this.displayedSource() !== PATTERN_SOURCE_USER ||
+      this.selectionIsCombined()
+    ) {
       return false;
     }
 
@@ -2425,7 +2447,10 @@ export class Panel {
    * and no instrument in it: the pattern the engine starts with.
    */
   private async clearPattern(): Promise<boolean> {
-    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+    if (
+      this.displayedSource() !== PATTERN_SOURCE_USER ||
+      this.selectionIsCombined()
+    ) {
       return false;
     }
 
@@ -2552,7 +2577,10 @@ export class Panel {
    * does not hold a copy of it.
    */
   private savePatterns(): boolean {
-    if (this.displayedSource() !== PATTERN_SOURCE_USER) {
+    if (
+      this.displayedSource() !== PATTERN_SOURCE_USER ||
+      this.selectionIsCombined()
+    ) {
       return false;
     }
 
