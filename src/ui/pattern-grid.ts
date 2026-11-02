@@ -1569,10 +1569,6 @@ export class PatternGrid {
       this.metaRow.append(compound);
     }
 
-    const cycle = document.createElement('span');
-    cycle.className = 'pattern-flag';
-    cycle.textContent = `${PATTERN_COLUMNS} COL`;
-    this.metaRow.append(cycle);
   }
 
   private updateState(): void {
