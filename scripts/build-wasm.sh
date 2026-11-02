@@ -15,7 +15,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPPY_REPO="${LIBPOPPY_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
-LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-2413f8822ad157c5277624d50df60785cdd8a899}"
+LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-e252fa4c956a58918facfc5da95daf031eade362}"
 # The checkout of the library that carries the newest API.
 LIBPOPPY_SIBLING="${LIBPOPPY_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.
