@@ -28,7 +28,7 @@ const STORAGE_KEY = 'poppy-web.controls.v2';
  * with it, and the positions of an older machine mean something else.
  * The tempo and the faders do not depend on it, and they are kept.
  */
-export const MEMORIES_VERSION = 2;
+export const MEMORIES_VERSION = 3;
 
 /** How long the controls have to stand still before they are written. */
 const WRITE_DELAY = 500;

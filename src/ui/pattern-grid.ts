@@ -960,7 +960,7 @@ export class PatternGrid {
     }
 
     rows.forEach((instrument, row) => {
-      const centre = row * ROW_HEIGHT + ROW_HEIGHT / 2;
+      const center = row * ROW_HEIGHT + ROW_HEIGHT / 2;
 
       // A voice that does not play is printed in a lighter ink: the card
       // shows that it is there and that it is still empty.
@@ -972,7 +972,7 @@ export class PatternGrid {
           : 'pattern-grid-label pattern-grid-label--empty',
       );
       label.setAttribute('x', String(LABEL_WIDTH - 8));
-      label.setAttribute('y', String(centre));
+      label.setAttribute('y', String(center));
       label.setAttribute('text-anchor', 'end');
       label.setAttribute('dominant-baseline', 'middle');
       label.textContent = INSTRUMENT_NAMES[instrument] ?? '';
@@ -980,7 +980,7 @@ export class PatternGrid {
 
       const bit = 1 << instrument;
       if (instrument === GUIRO_INSTRUMENT) {
-        this.renderGuiroRow(pattern, centre);
+        this.renderGuiroRow(pattern, center);
         return;
       }
       for (let column = 0; column < PATTERN_COLUMNS; column += 1) {
@@ -1004,7 +1004,7 @@ export class PatternGrid {
         }
         const hit = svgElement('circle', classes.join(' '));
         hit.setAttribute('cx', String(this.columnX(column) + columnWidth / 2));
-        hit.setAttribute('cy', String(centre));
+        hit.setAttribute('cy', String(center));
         hit.setAttribute('r', String(HIT_RADIUS));
         this.layer.append(hit);
       }
@@ -1027,10 +1027,10 @@ export class PatternGrid {
    *
    * The row is printed in red, the colour of the bank B names.
    */
-  private renderAccentRow(pattern: CardPattern, centre: number): void {
+  private renderAccentRow(pattern: CardPattern, center: number): void {
     const label = svgElement('text', 'pattern-grid-label');
     label.setAttribute('x', String(LABEL_WIDTH - 8));
-    label.setAttribute('y', String(centre));
+    label.setAttribute('y', String(center));
     label.setAttribute('text-anchor', 'end');
     label.setAttribute('dominant-baseline', 'middle');
     label.textContent = 'Accent';
@@ -1044,8 +1044,8 @@ export class PatternGrid {
         'circle',
         'pattern-grid-hit pattern-grid-hit--accent',
       );
-      dot.setAttribute('cx', String(this.columnCentre(column)));
-      dot.setAttribute('cy', String(centre));
+      dot.setAttribute('cx', String(this.columnCenter(column)));
+      dot.setAttribute('cy', String(center));
       dot.setAttribute('r', String(HIT_RADIUS));
       this.layer.append(dot);
     }
@@ -1390,7 +1390,7 @@ export class PatternGrid {
    * The Guiro row: a run of hits is printed as a bar with a dot at each
    * end, so the card shows the roll the machine plays.
    */
-  private renderGuiroRow(pattern: CardPattern, centre: number): void {
+  private renderGuiroRow(pattern: CardPattern, center: number): void {
     for (const run of this.guiroRuns(pattern)) {
       for (const part of this.guiroParts(run)) {
         const first = part[0];
@@ -1400,15 +1400,15 @@ export class PatternGrid {
         }
         if (first !== last) {
           const bar = svgElement('line', 'pattern-grid-gate');
-          bar.setAttribute('x1', String(this.columnCentre(first)));
-          bar.setAttribute('x2', String(this.columnCentre(last)));
-          bar.setAttribute('y1', String(centre));
-          bar.setAttribute('y2', String(centre));
+          bar.setAttribute('x1', String(this.columnCenter(first)));
+          bar.setAttribute('x2', String(this.columnCenter(last)));
+          bar.setAttribute('y1', String(center));
+          bar.setAttribute('y2', String(center));
           this.layer.append(bar);
         }
-        this.drawGuiroHit(first, centre);
+        this.drawGuiroHit(first, center);
         if (last !== first) {
-          this.drawGuiroHit(last, centre);
+          this.drawGuiroHit(last, center);
         }
       }
     }
@@ -1426,19 +1426,19 @@ export class PatternGrid {
       if (((pattern.notes[column] ?? 0) & bit) === 0) {
         continue;
       }
-      this.drawGuiroHit(column, centre, true);
+      this.drawGuiroHit(column, center, true);
     }
   }
 
-  private drawGuiroHit(column: number, centre: number, skipped = false): void {
+  private drawGuiroHit(column: number, center: number, skipped = false): void {
     const hit = svgElement(
       'circle',
       skipped
         ? 'pattern-grid-hit pattern-grid-hit--skipped'
         : 'pattern-grid-hit pattern-grid-hit--perc',
     );
-    hit.setAttribute('cx', String(this.columnCentre(column)));
-    hit.setAttribute('cy', String(centre));
+    hit.setAttribute('cx', String(this.columnCenter(column)));
+    hit.setAttribute('cy', String(center));
     hit.setAttribute('r', String(HIT_RADIUS));
     this.layer.append(hit);
   }
@@ -1596,8 +1596,8 @@ export class PatternGrid {
     return LABEL_WIDTH + column * this.columnWidth;
   }
 
-  /** The centre of a column, where its hits are printed. */
-  private columnCentre(column: number): number {
+  /** The center of a column, where its hits are printed. */
+  private columnCenter(column: number): number {
     return this.columnX(column) + this.columnWidth / 2;
   }
 
@@ -1696,8 +1696,8 @@ export class PatternGrid {
     }
 
     const x =
-      this.columnCentre(current) +
-      (this.columnCentre(next) - this.columnCentre(current)) * lead;
+      this.columnCenter(current) +
+      (this.columnCenter(next) - this.columnCenter(current)) * lead;
 
     this.playhead.setAttribute('x', String(x - PLAYHEAD_WIDTH / 2));
     this.playhead.setAttribute('y', '0');

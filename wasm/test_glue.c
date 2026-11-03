@@ -351,8 +351,8 @@ int main(void)
           "a higher accent gain is louder");
 
     /* The settings the band of knobs reaches for: the level of the snare,
-     * the decay and the centre of its band-pass, the corner of the
-     * high-pass of the hi-hat and the place of a voice in the stereo
+     * the decay and the center of its band-pass, the center of the
+     * band-pass of the hi-hat and the place of a voice in the stereo
      * field. */
     static uint16_t snare_notes[MP7_USER_PATTERN_COLUMNS];
     static int16_t snare[20480];
@@ -443,10 +443,10 @@ int main(void)
 
     /* The place of a voice in the stereo field. The pan is a place
      * between the two channels: a voice that is panned hard to one side
-     * is louder in that channel, and a voice in the centre is the same
+     * is louder in that channel, and a voice in the center is the same
      * in both. */
     static int16_t panned[4096];
-    static int16_t centred[4096];
+    static int16_t centered[4096];
 
     poppy_reset(ctx);
     poppy_set_instr_pan(ctx, MP7_INSTR_SNARE_1, 65536);
@@ -464,9 +464,9 @@ int main(void)
 
     poppy_reset(ctx);
     poppy_trigger(ctx, MP7_INSTR_SNARE_1, 127);
-    render(ctx, centred, 4096);
-    check(channel_peak(centred, 4096, 0) == channel_peak(centred, 4096, 1),
-          "a voice in the centre of the field is the same in both channels");
+    render(ctx, centered, 4096);
+    check(channel_peak(centered, 4096, 0) == channel_peak(centered, 4096, 1),
+          "a voice in the center of the field is the same in both channels");
 
     /* A pan outside the range of the parameter is clamped by the engine. */
     poppy_reset(ctx);

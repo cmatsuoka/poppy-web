@@ -1476,7 +1476,7 @@ body {
    keybed. */
 .start-stop {
   position: relative;
-  /* The two legends share one column: START stays centred, STOP hangs
+  /* The two legends share one column: START stays centered, STOP hangs
      from its left edge. */
   display: grid;
   grid-template-columns: max-content;

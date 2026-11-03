@@ -330,7 +330,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
         break;
       case 'spread': {
         // Every instrument that is spread moves to its own place in the
-        // stereo field. The instruments that stay in the centre are not
+        // stereo field. The instruments that stay in the center are not
         // touched at all.
         for (const instrument of SPREAD_INSTRUMENTS) {
           module._poppy_set_instr_pan(

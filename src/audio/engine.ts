@@ -27,9 +27,9 @@ interface Settings {
   instrPan: number[];
   /** The decay of the snare 1, as a multiplier of the factory decay, Q16. */
   snare1Decay: number;
-  /** The centre of the band-pass of the snare 1, in Hz. */
+  /** The center of the band-pass of the snare 1, in Hz. */
   snare1Cutoff: number;
-  /** The corner of the high-pass of the hi-hat, in Hz. */
+  /** The center of the band-pass of the hi-hat, in Hz. */
   hihatCutoff: number;
 }
 
@@ -64,15 +64,15 @@ function defaultSettings(): Settings {
     // The engine's own accent gain: 1.2 times the level of a column that
     // is not accented.
     accentGain: Math.round((6 * Q16) / 5),
-    // The instruments stand in the centre of the stereo field, the way
+    // The instruments stand in the center of the stereo field, the way
     // the engine comes up.
     spread: 0,
-    // Every instrument stands in the centre of the stereo field.
+    // Every instrument stands in the center of the stereo field.
     instrPan: Array.from({ length: 15 }, () => Q16 / 2),
     // The factory decay of the snare 1 and the factory cut-offs.
     snare1Decay: Q16,
     snare1Cutoff: 5500,
-    hihatCutoff: 1000,
+    hihatCutoff: 10000,
   };
 }
 
@@ -228,7 +228,7 @@ export class PoppyEngine {
    * The place of an instrument in the stereo field, Q16.
    *
    * Zero is hard left, 65536 is hard right and 32768 - the place every
-   * instrument comes up in - is the centre of the field.
+   * instrument comes up in - is the center of the field.
    */
   setInstrumentPan(instrument: number, value: number): void {
     if (instrument < 0 || instrument >= this.settings.instrPan.length) {
@@ -251,14 +251,14 @@ export class PoppyEngine {
     this.wake();
   }
 
-  /** The centre of the band-pass of the snare 1, in Hz. */
+  /** The center of the band-pass of the snare 1, in Hz. */
   setSnare1Cutoff(value: number): void {
     this.settings.snare1Cutoff = value;
     this.post({ type: 'snare1Cutoff', value });
     this.wake();
   }
 
-  /** The corner of the high-pass of the hi-hat, in Hz. */
+  /** The center of the band-pass of the hi-hat, in Hz. */
   setHihatCutoff(value: number): void {
     this.settings.hihatCutoff = value;
     this.post({ type: 'hihatCutoff', value });
@@ -279,9 +279,9 @@ export class PoppyEngine {
    * Spread the instruments over the stereo field.
    *
    * The knob stands between -1 and 1: at zero every instrument is in the
-   * centre of the field, at one every instrument stands as far to its own
+   * center of the field, at one every instrument stands as far to its own
    * side as it goes, and below zero the whole field is mirrored. The
-   * instruments that stay in the centre are not touched.
+   * instruments that stay in the center are not touched.
    */
   setStereoSpread(value: number): void {
     const spread = Math.min(1, Math.max(-1, value));

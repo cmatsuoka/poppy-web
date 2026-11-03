@@ -200,14 +200,13 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       id: 'hh-cutoff',
       label: 'HH CUTOFF',
       ariaLabel: 'Hi-hat cutoff',
-      // The cut-off of the original unit is 1 kHz, and it stands in the
-      // middle of the knob: the knob reaches half of it and 1.5 times it.
-      // The engine takes nothing below 500 Hz, so the knob does not go
-      // lower than that.
-      min: 500,
-      max: 1500,
-      defaultValue: 1000,
-      seedValue: 1400,
+      // The center of the band-pass of the original unit is 10 kHz, and it
+      // stands in the middle of the knob: the knob reaches half of it and
+      // 1.5 times it. The high-pass stays at its factory corner.
+      min: 5000,
+      max: 15000,
+      defaultValue: 10000,
+      seedValue: 14000,
       valueText: (value) =>
         value < 1000 ? `${Math.round(value)} Hz` : `${(value / 1000).toFixed(1)} kHz`,
       onInput: (value) => {
@@ -252,7 +251,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
       },
       onInput: (value) => {
         // The knob spreads the instruments over the stereo field: every
-        // instrument moves from the centre towards the side it belongs
+        // instrument moves from the center towards the side it belongs
         // to, and below zero the whole field is mirrored.
         engine.setStereoSpread(value);
       },
@@ -265,7 +264,7 @@ function bandKnobs(engine: PoppyEngine): BandKnob[] {
  *
  * The first position is seeded with the seeded values of the knobs: the
  * accent at 1.40, the snare 1 at 1.00, at 350 ms and at 5.5 kHz, the
- * hi-hat at 1.00 and at 1.4 kHz, the percussion at 0.75 and the pan
+ * hi-hat at 1.00 and at 14 kHz, the percussion at 0.75 and the pan
  * spread at +50%. The other
  * three positions have no seeded values and come up with the default
  * values of the knobs.
@@ -625,7 +624,7 @@ class Knob {
     this.dial.setAttribute('aria-valuemin', String(this.min));
     this.dial.setAttribute('aria-valuemax', String(this.max));
     // The knob body stays put; only the white index line sweeps, so the
-    // knurling and the drop shadow never make the dial look off-centre.
+    // knurling and the drop shadow never make the dial look off-center.
     const pointer = element('span', 'knob-pointer');
     pointer.setAttribute('aria-hidden', 'true');
     this.base.append(this.dial, pointer);

@@ -154,7 +154,7 @@ WASM_EXPORT void poppy_set_instr_gain(void *ctx, int32_t instrument, int32_t q16
 /* The place of an instrument in the stereo field, Q16.
  *
  * The engine's pan law is linear: 0 is hard left, 65536 is hard right and
- * 32768 - the default of every instrument - is the centre of the field. */
+ * 32768 - the default of every instrument - is the center of the field. */
 WASM_EXPORT void poppy_set_instr_pan(void *ctx, int32_t instrument, int32_t pan)
 {
     mp7_set_instr_pan(ctx, (mp7_instr)instrument, pan);
@@ -166,21 +166,22 @@ WASM_EXPORT void poppy_set_instr_pan(void *ctx, int32_t instrument, int32_t pan)
  * quarter and to four times the factory decay. */
 WASM_EXPORT void poppy_set_snare1_decay(void *ctx, int32_t decay_q16)
 {
-    mp7_set_snare1_decay(ctx, decay_q16);
+    mp7_set_instr_decay(ctx, MP7_INSTR_SNARE_1, decay_q16);
 }
 
-/* The centre of the band-pass of the snare 1, in Hz. The engine clamps it
+/* The center of the band-pass of the snare 1, in Hz. The engine clamps it
  * to the range of the parameter and to two fifths of the sample rate. */
 WASM_EXPORT void poppy_set_snare1_cutoff(void *ctx, int32_t cutoff_hz)
 {
-    mp7_set_snare1_cutoff(ctx, (uint32_t)cutoff_hz);
+    mp7_set_instr_cutoff(ctx, MP7_INSTR_SNARE_1, (uint32_t)cutoff_hz);
 }
 
-/* The corner of the high-pass of the hi-hat, in Hz. The engine clamps it
- * to the range of the parameter and to two fifths of the sample rate. */
+/* The center of the band-pass of the hi-hat, in Hz. The engine clamps it
+ * to the range of the parameter and to two fifths of the sample rate. The
+ * high-pass of the hi-hat stays at the factory corner. */
 WASM_EXPORT void poppy_set_hihat_cutoff(void *ctx, int32_t cutoff_hz)
 {
-    mp7_set_hihat_cutoff(ctx, (uint32_t)cutoff_hz);
+    mp7_set_instr_cutoff(ctx, MP7_INSTR_HIHAT, (uint32_t)cutoff_hz);
 }
 
 /* The gain an accented column is played at, Q16. */

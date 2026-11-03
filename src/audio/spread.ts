@@ -18,10 +18,10 @@ const Q16 = 65536;
 /**
  * How far every instrument is spread over the stereo field.
  *
- * The number is the part of the way from the centre of the field to its
+ * The number is the part of the way from the center of the field to its
  * edge: 0.30 is thirty percent of the way to the right and -0.60 sixty
  * percent of the way to the left. The bass drum, the snare 1 and the
- * claves are not in the table: they stay in the centre of the field.
+ * claves are not in the table: they stay in the center of the field.
  */
 export const STEREO_SPREAD: Readonly<Record<number, number>> = {
   [INSTR_SNARE_2]: 0.3,
@@ -42,7 +42,7 @@ export const STEREO_SPREAD: Readonly<Record<number, number>> = {
  * The instruments the spread knob reaches for.
  *
  * The bass drum, the snare 1 and the claves are not among them: they
- * stay in the centre of the field.
+ * stay in the center of the field.
  */
 export const SPREAD_INSTRUMENTS = Object.keys(STEREO_SPREAD).map(Number);
 
@@ -50,7 +50,7 @@ export const SPREAD_INSTRUMENTS = Object.keys(STEREO_SPREAD).map(Number);
  * The place of an instrument in the stereo field, Q16.
  *
  * The knob stands between -1 and 1. At zero every instrument is in the
- * centre of the field, at one every instrument stands as far to its side
+ * center of the field, at one every instrument stands as far to its side
  * as the table says it goes, and below zero the whole field is mirrored.
  * The engine's pan law is linear: the number is the part of the signal
  * that goes into the right channel.
