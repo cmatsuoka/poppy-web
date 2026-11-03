@@ -14,6 +14,20 @@ import {
 const Q16 = 65536;
 const FALLBACK_SAMPLE_RATE = 48000;
 
+/**
+ * The peak of the constant noise floor added to the output.
+ *
+ * This is a workaround for certain USB speakers, the JBL Quantum Duo in
+ * particular: they keep a noise gate on their input and cut quiet passages,
+ * or a soft instrument that plays alone. A constant, inaudible noise floor keeps the
+ * gate open. Uniform noise at this peak has an RMS of about 0.001, which is
+ * -60 dBFS: far below anything the machine plays, and below the hearing
+ * threshold at any sane listening volume. The noise is deliberate; do not
+ * remove it without checking the gate bug on those speakers.
+ */
+const GATE_NOISE_AMPLITUDE = 0.00173;
+const GATE_NOISE_SECONDS = 2;
+
 interface Settings {
   tempo: number;
   volume: number;
@@ -79,6 +93,7 @@ function defaultSettings(): Settings {
 export class PoppyEngine {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
+  private gateNoise: AudioBufferSourceNode | null = null;
   private starting: Promise<void> | null = null;
   private panelState: PanelState = { ...INITIAL_PANEL_STATE };
   private settings = defaultSettings();
@@ -376,6 +391,9 @@ export class PoppyEngine {
   }
 
   async dispose(): Promise<void> {
+    this.gateNoise?.stop();
+    this.gateNoise?.disconnect();
+    this.gateNoise = null;
     this.node?.disconnect();
     this.node = null;
     const context = this.context;
@@ -448,6 +466,9 @@ export class PoppyEngine {
       });
 
       node.connect(context.destination);
+      this.gateNoise = this.createGateNoise(context);
+      this.gateNoise.connect(context.destination);
+      this.gateNoise.start();
       this.context = context;
       this.node = node;
       this.applySettings();
@@ -463,6 +484,27 @@ export class PoppyEngine {
       await context.close();
       throw error;
     }
+  }
+
+  /**
+   * Build the constant noise floor that keeps a speaker's noise gate open.
+   *
+   * The samples are generated once, by the browser, into a looping buffer:
+   * the hardware plays them from then on, so the worklet and the main thread
+   * spend no work per sample on the workaround.
+   */
+  private createGateNoise(context: AudioContext): AudioBufferSourceNode {
+    const frames = Math.ceil(context.sampleRate * GATE_NOISE_SECONDS);
+    const buffer = context.createBuffer(1, frames, context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    for (let index = 0; index < frames; index += 1) {
+      samples[index] = (Math.random() * 2 - 1) * GATE_NOISE_AMPLITUDE;
+    }
+
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    return source;
   }
 
   /**
