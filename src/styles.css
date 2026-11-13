@@ -1907,11 +1907,15 @@ body {
   pointer-events: none;
 }
 
-.pattern-grid:focus-visible {
+/* The grid carries its own indicator: the cursor around the step the
+   keyboard is on says where the editing goes, so the ring of the browser
+   has nothing to add to it, and the cursor is strong whenever the grid is
+   the field. */
+.pattern-grid:focus {
   outline: none;
 }
 
-.pattern-grid:focus-visible .pattern-grid-cursor {
+.pattern-grid:focus .pattern-grid-cursor {
   stroke: var(--ink);
   stroke-width: 1.5;
 }
