@@ -666,15 +666,44 @@ export class PatternGrid {
   }
 
   /**
-   * Forget the patterns the card holds and read them again.
+   * Ask for the patterns again and keep what is on the card until they
+   * come back.
    *
-   * A user pattern that was written, and a change of the source, both make
-   * the patterns the card shows out of date.
+   * The card holds on to the view it prints while the fresh one is on its
+   * way: a context that is parked for being idle (and is woken up for the
+   * request) answers in tens of milliseconds, and the blank card in
+   * between would blink on every step that is written.
    */
   invalidate(): void {
-    this.view = null;
     this.requested = '';
     this.requestView(this.bank, this.buttons);
+  }
+
+  /**
+   * Print a step the panel has written before the engine says it back.
+   *
+   * The engine composes the view of the selection, and a step that is
+   * written lands in it as the bit of a column: setting or clearing it in
+   * the view the card already holds prints the change at once, instead of
+   * waiting for the round trip. The fresh view of the engine replaces it
+   * when it arrives.
+   */
+  applyStep(column: number, bit: number, on: boolean): void {
+    const view = this.view;
+    if (
+      view === null ||
+      this.source !== PATTERN_SOURCE_USER ||
+      this.isCombined()
+    ) {
+      return;
+    }
+    const mask = view.notes[column] ?? 0;
+    if (((mask & bit) !== 0) === on) {
+      return;
+    }
+    const notes = view.notes.slice();
+    notes[column] = on ? (mask | bit) & 0xffff : (mask & ~bit) & 0xffff;
+    view.notes = notes;
     this.rebuild();
   }
 

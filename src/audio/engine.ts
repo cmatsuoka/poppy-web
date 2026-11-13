@@ -31,9 +31,14 @@ const GATE_NOISE_SECONDS = 2;
 const GATE_NOISE_FADE = 0.02;
 /**
  * How long the context keeps running after the last sound, so a command that
- * was just posted is handled before the render thread is parked.
+ * was just posted is handled before the render thread is parked, and how
+ * often the park check comes back while the machine is idle. The cut does
+ * not have to be immediate: what must not happen is an idle context staying
+ * awake for good, so the check never gives up — a check that went off while
+ * a wake was still on its way, or a context that was woken behind the
+ * panel's back, is parked again on the next turn.
  */
-const IDLE_SUSPEND_DELAY = 250;
+const IDLE_SUSPEND_DELAY = 1000;
 
 interface Settings {
   tempo: number;
@@ -635,21 +640,36 @@ export class PoppyEngine {
       return;
     }
     this.cancelIdleSuspend();
-    this.idleSuspendTimer = setTimeout(() => {
-      this.idleSuspendTimer = null;
-      const context = this.context;
-      if (
-        this.sounding ||
-        context === null ||
-        context.state !== 'running'
-      ) {
-        return;
-      }
+    // The delay is what gives a command that was just posted the time to
+    // be handled: parking before it was read parks the answer with it.
+    this.idleSuspendTimer = setTimeout(this.parkCheck, IDLE_SUSPEND_DELAY);
+  }
+
+  /**
+   * One turn of the park check.
+   *
+   * The check never gives up on an idle machine: as long as no sound is
+   * reported and the context is there, it comes back every period until
+   * the machine sounds again. A one-shot timer could not say the same —
+   * one that went off while a `resume()` was still on its way found the
+   * context not running yet, gave up, and left the machine awake for good;
+   * the repeated look parks a context that wakes behind the panel's back
+   * as well.
+   */
+  private readonly parkCheck = (): void => {
+    const context = this.context;
+    if (this.sounding || context === null || context.state === 'closed') {
+      // The report of a sound (or the end of the machine) stops the check,
+      // and the report of the last sound brings it back.
+      return;
+    }
+    this.idleSuspendTimer = setTimeout(this.parkCheck, IDLE_SUSPEND_DELAY);
+    if (context.state === 'running') {
       void context.suspend().catch(() => {
         // The context may have been closed in the meantime.
       });
-    }, IDLE_SUSPEND_DELAY);
-  }
+    }
+  };
 
   private cancelIdleSuspend(): void {
     if (this.idleSuspendTimer !== null) {

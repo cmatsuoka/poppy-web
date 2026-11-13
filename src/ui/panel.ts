@@ -2850,6 +2850,9 @@ export class Panel {
       this.changedSlots.add(slot);
     }
 
+    // The card carries the change at once: it sets or clears the bit in
+    // the view it prints, and reads the view of the engine again after.
+    this.card.applyStep(column, bit, on);
     // The card shows the pattern that plays, so it has to read it again.
     this.card.invalidate();
     // The pattern is not in the browser until the save button is pressed.
