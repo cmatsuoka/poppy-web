@@ -15,10 +15,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpops.git}"
-# The rename to libpops, and the sound adjustments the panel is written
-# against, are upstream now. Update this deliberately: the API is still
-# moving.
-LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-f11bc09b8900d78b81b2068c23c8904c076bb944}"
+# The rename to libpops, the sound adjustments the panel is written
+# against, and the adjustable high-pass of the cymbals are upstream now.
+# Update this deliberately: the API is still moving.
+LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-0c32bcf2a5c89acbb7b0c16a70384689eac43fe4}"
 # The checkout of the library that carries the newest API.
 LIBPOPS_SIBLING="${LIBPOPS_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.
