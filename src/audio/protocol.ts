@@ -10,7 +10,7 @@ export const PATTERN_SOURCE_PRESET: PatternSource = 0;
 export const PATTERN_SOURCE_USER: PatternSource = 1;
 
 export const INSTRUMENT_NAMES = [
-  'Bass',
+  'Bass Drum',
   'Snare 1',
   'Snare 2',
   'Sm Bongo',
