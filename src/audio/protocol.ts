@@ -300,6 +300,7 @@ export type EngineCommand =
   | { type: 'instrTune'; instrument: number; value: number }
   | { type: 'instrDecay'; instrument: number; value: number }
   | { type: 'instrCutoff'; instrument: number; value: number }
+  | { type: 'instrHighpass'; instrument: number; value: number }
   | { type: 'instrFxSend'; instrument: number; value: number }
   | { type: 'accentGain'; value: number }
   | { type: 'pattern'; bank: Bank; buttons: number }

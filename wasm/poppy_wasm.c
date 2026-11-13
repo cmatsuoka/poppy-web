@@ -183,6 +183,18 @@ WASM_EXPORT void poppy_set_instr_cutoff(void *ctx, int32_t instrument,
     pops_set_instr_cutoff(ctx, (pops_instr)instrument, (uint32_t)cutoff_hz);
 }
 
+/* The noise high-pass of an instrument, in Hz.
+ *
+ * The engine clamps it to the range of the parameter and to two fifths of
+ * the sample rate. The engine takes the high-pass for the two cymbals,
+ * whose band-pass is fixed, and ignores it for every other instrument. */
+WASM_EXPORT void poppy_set_instr_highpass(void *ctx, int32_t instrument,
+                                          int32_t highpass_hz)
+{
+    pops_set_instr_highpass(ctx, (pops_instr)instrument,
+                             (uint32_t)highpass_hz);
+}
+
 /* The tuning of an instrument, Q16: 65536 is the factory pitch, 32768 an
  * octave down and 131072 an octave up. The engine clamps the multiplier to
  * half and to twice the factory pitch, and it takes the tuning of every

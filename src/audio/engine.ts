@@ -2,6 +2,8 @@ import wasmUrl from '../../build/poppy.wasm?url';
 import workletUrl from './worklet.ts?worker&url';
 import {
   INITIAL_PANEL_STATE,
+  INSTR_CYMBAL_1,
+  INSTR_CYMBAL_2,
   type Bank,
   type EngineCommand,
   type EngineEvent,
@@ -55,6 +57,8 @@ interface Settings {
   instrDecay: number[];
   /** The center of the band-pass of an instrument, in Hz. */
   instrCutoff: number[];
+  /** The corner of the noise high-pass of an instrument, in Hz. */
+  instrHighpass: number[];
   /** The reverb send of an instrument, Q16. */
   instrFxSend: number[];
 }
@@ -86,6 +90,12 @@ function defaultSettings(): Settings {
   instrCutoff[1] = 5500;
   instrCutoff[2] = 5500;
   instrCutoff[8] = 10000;
+  // The high-passes the engine comes up with: 5.5 kHz for the two
+  // cymbals, the factory corner of their noise filter. The voices
+  // without a settable high-pass carry a zero.
+  const instrHighpass = Array.from({ length: 15 }, () => 0);
+  instrHighpass[INSTR_CYMBAL_1] = 5500;
+  instrHighpass[INSTR_CYMBAL_2] = 5500;
   return {
     tempo: 120,
     // Mid-position on the volume fader maps to panel value 2.0, which the
@@ -103,6 +113,7 @@ function defaultSettings(): Settings {
     // The factory decay of every instrument.
     instrDecay: Array.from({ length: 15 }, () => Q16),
     instrCutoff,
+    instrHighpass,
     // No instrument sends to the reverb when the machine comes up.
     instrFxSend: Array.from({ length: 15 }, () => 0),
   };
@@ -321,6 +332,21 @@ export class PoppyEngine {
     }
     this.settings.instrCutoff[instrument] = value;
     this.post({ type: 'instrCutoff', instrument, value });
+    this.wake();
+  }
+
+  /**
+   * The corner of the noise high-pass of an instrument, in Hz.
+   *
+   * The engine takes the high-pass for the two cymbals, whose band-pass
+   * is fixed, and ignores it for every other instrument.
+   */
+  setInstrumentHighpass(instrument: number, value: number): void {
+    if (instrument < 0 || instrument >= this.settings.instrHighpass.length) {
+      return;
+    }
+    this.settings.instrHighpass[instrument] = value;
+    this.post({ type: 'instrHighpass', instrument, value });
     this.wake();
   }
 
@@ -697,6 +723,9 @@ export class PoppyEngine {
     });
     this.settings.instrCutoff.forEach((value, instrument) => {
       this.post({ type: 'instrCutoff', instrument, value });
+    });
+    this.settings.instrHighpass.forEach((value, instrument) => {
+      this.post({ type: 'instrHighpass', instrument, value });
     });
     this.settings.instrFxSend.forEach((value, instrument) => {
       this.post({ type: 'instrFxSend', instrument, value });

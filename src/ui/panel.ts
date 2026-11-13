@@ -97,6 +97,19 @@ const FACTORY_CUTOFF_HZ: Readonly<Record<number, number>> = {
 };
 
 /**
+ * The corner of the noise high-pass the voices the engine takes one for
+ * come up with, in hertz.
+ *
+ * The two cymbals are the voices the extended build of the engine
+ * exposes the high-pass for: their band-pass is fixed, so the high-pass
+ * is the tone control of their voice.
+ */
+const FACTORY_HIGHPASS_HZ: Readonly<Record<number, number>> = {
+  [INSTR_CYMBAL_1]: 5500,
+  [INSTR_CYMBAL_2]: 5500,
+};
+
+/**
  * Whether the engine takes the cut-off of a voice.
  *
  * The snare 1, the snare 2 and the hi-hat are the voices the extended
@@ -113,6 +126,28 @@ function hasCutoff(instrument: number): boolean {
 }
 
 /**
+ * Whether the engine takes the high-pass of a voice.
+ *
+ * The two cymbals are the voices the extended build of the engine
+ * exposes it for; every other voice has no knob for it and the knob
+ * stands dimmed.
+ */
+function hasHighpass(instrument: number): boolean {
+  return instrument === INSTR_CYMBAL_1 || instrument === INSTR_CYMBAL_2;
+}
+
+/**
+ * Whether the engine takes the filter of a voice.
+ *
+ * The knob of the band is the cut-off of the snares and of the hi-hat
+ * and the high-pass of the two cymbals: every other voice has no
+ * filter of its own to move, and the knob stands dimmed for it.
+ */
+function hasFilter(instrument: number): boolean {
+  return hasCutoff(instrument) || hasHighpass(instrument);
+}
+
+/**
  * The range the cut-off knob takes for an instrument.
  *
  * The hi-hat's band-pass cannot go below its factory high-pass, so its
@@ -124,6 +159,43 @@ function cutoffBounds(instrument: number): { min: number; max: number } {
   return instrument === INSTR_HIHAT
     ? { min: 2000, max: 15000 }
     : { min: 1000, max: 15000 };
+}
+
+/**
+ * The range the high-pass of a voice takes.
+ *
+ * The engine clamps the corner of the high-pass to the range of the
+ * voice: it never goes below 2 kHz, so the metallic voices stay out of
+ * the low band, and it never goes above 5.5 kHz, the factory value,
+ * which sits a hundred Hz below the fixed band-pass of the cymbals.
+ */
+function highpassBounds(instrument: number): { min: number; max: number } {
+  return { min: 2000, max: 5500 };
+}
+
+/**
+ * The range the filter knob takes for an instrument.
+ *
+ * The knob is the cut-off of the snares and of the hi-hat, and the
+ * high-pass of the two cymbals, whose band-pass is fixed: it is the
+ * filter the voice has, and it takes the range of that filter.
+ */
+function filterBounds(instrument: number): { min: number; max: number } {
+  return hasHighpass(instrument)
+    ? highpassBounds(instrument)
+    : cutoffBounds(instrument);
+}
+
+/**
+ * The value the filter knob stands at when the machine comes up.
+ *
+ * It is the cut-off of the snares and of the hi-hat, and the high-pass
+ * of the two cymbals.
+ */
+function factoryFilterHz(instrument: number): number {
+  return (
+    FACTORY_CUTOFF_HZ[instrument] ?? FACTORY_HIGHPASS_HZ[instrument] ?? 5500
+  );
 }
 
 /**
@@ -149,7 +221,11 @@ interface InstrumentSettings {
   pan: number;
   /** The tone, as a multiplier of what the engine pitches in the voice. */
   tone: number;
-  /** The center of the band-pass, in hertz. */
+  /**
+   * The filter of the voice, in hertz: the center of the band-pass of
+   * the snares and of the hi-hat, the corner of the high-pass of the
+   * two cymbals.
+   */
   filter: number;
   /** The decay, as a multiplier of the factory decay. */
   decay: number;
@@ -176,7 +252,7 @@ function defaultInstrumentSettings(instrument: number): InstrumentSettings {
     vol: 1,
     pan: 0,
     tone: 1,
-    filter: FACTORY_CUTOFF_HZ[instrument] ?? 5500,
+    filter: factoryFilterHz(instrument),
     decay: 1,
     send: 0,
   };
@@ -300,15 +376,23 @@ function bandParamKnobs(engine: PoppyEngine): BandParamKnob[] {
     {
       param: 'filter',
       label: 'CUTOFF',
-      ariaLabel: 'Cut-off of the selected instrument',
-      // The cut-off is the center of the band-pass. The hi-hat's
-      // band-pass cannot go below its factory high-pass at 1 kHz.
-      bounds: cutoffBounds,
-      defaultValue: (instrument) => FACTORY_CUTOFF_HZ[instrument] ?? 5500,
-      supported: hasCutoff,
+      ariaLabel: 'Filter of the selected instrument',
+      // The knob is the filter the voice has. The snare 1, the snare 2
+      // and the hi-hat are voices with a band-pass: the knob is the
+      // center of it, and the hi-hat's band-pass cannot go below its
+      // factory high-pass at 1 kHz. The two cymbals have no band-pass
+      // of their own: the knob is the corner of their high-pass, the
+      // low end of their noise.
+      bounds: filterBounds,
+      defaultValue: factoryFilterHz,
+      supported: hasFilter,
       valueText: (value, instrument) =>
-        hasCutoff(instrument) ? `${(value / 1000).toFixed(1)} kHz` : '—',
+        hasFilter(instrument) ? `${(value / 1000).toFixed(1)} kHz` : '—',
       apply: (value, instrument) => {
+        if (hasHighpass(instrument)) {
+          engine.setInstrumentHighpass(instrument, Math.round(value));
+          return;
+        }
         engine.setInstrumentCutoff(instrument, Math.round(value));
       },
     },
@@ -1691,15 +1775,15 @@ export class Panel {
   ): BandMemoryPosition {
     const instruments = fallback.instruments.map((settings, index) => {
       const kept = stored.instruments?.[index] ?? {};
-      const filterBounds = cutoffBounds(BAND_INSTRUMENTS[index] ?? 0);
+      const limits = filterBounds(BAND_INSTRUMENTS[index] ?? 0);
       return {
         vol: clamp(kept.vol ?? settings.vol, 0, 2),
         pan: clamp(kept.pan ?? settings.pan, -1, 1),
         tone: clamp(kept.tone ?? settings.tone, 0.5, 2),
         filter: clamp(
           kept.filter ?? settings.filter,
-          filterBounds.min,
-          filterBounds.max,
+          limits.min,
+          limits.max,
         ),
         decay: clamp(kept.decay ?? settings.decay, 0.2, 5),
         send: clamp(kept.send ?? settings.send, 0, 1),

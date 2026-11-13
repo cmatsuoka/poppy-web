@@ -384,6 +384,13 @@ class PoppyProcessor extends AudioWorkletProcessor {
           command.value,
         );
         break;
+      case 'instrHighpass':
+        module._poppy_set_instr_highpass(
+          this.context,
+          command.instrument,
+          command.value,
+        );
+        break;
       case 'instrFxSend':
         module._poppy_set_instr_fx_send(
           this.context,

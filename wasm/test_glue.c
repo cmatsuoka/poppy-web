@@ -499,6 +499,29 @@ int main(void)
     check(memcmp(bright, hihat, sizeof(hihat)) != 0,
           "a higher cutoff of the hi-hat changes the voice");
 
+    /* The high-pass of a cymbal. The band-pass of the two cymbals is
+     * fixed, so the high-pass is the tone control of their voice: a
+     * lower corner lets more of the low band through. */
+    static uint16_t cymbal_notes[POPS_USER_PATTERN_COLUMNS];
+    static int16_t cymbal[20480];
+
+    for (int column = 0; column < POPS_USER_PATTERN_COLUMNS; column++) {
+        cymbal_notes[column] = (uint16_t)((column % 8) == 0
+                                         ? (1u << POPS_INSTR_CYMBAL_1)
+                                         : 0);
+    }
+
+    prepare_pattern(ctx, 9, cymbal_notes);
+    render(ctx, cymbal, 20480);
+    check(peak(cymbal, 20480) > 0, "the cymbal is heard");
+
+    prepare_pattern(ctx, 9, cymbal_notes);
+    poppy_set_instr_highpass(ctx, POPS_INSTR_CYMBAL_1, 2000);
+    render(ctx, bright, 20480);
+    check(memcmp(bright, cymbal, sizeof(cymbal)) != 0,
+          "a lower high-pass of the cymbal changes the voice");
+    poppy_set_instr_highpass(ctx, POPS_INSTR_CYMBAL_1, 5500);
+
     /* The reverb send of a voice. In a build with the reverb bus a send
      * makes the voice ring on, and a voice that sends nothing is left
      * alone. The sends are stored either way. */
