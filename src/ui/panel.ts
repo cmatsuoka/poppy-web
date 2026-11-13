@@ -2422,6 +2422,17 @@ export class Panel {
     if (this.transportIntent) {
       this.transportIntent = false;
       this.engine.stop();
+      // The engine throws a selection away that waits for the end of the
+      // cycle: its next snapshot would roll the keys back to the rhythm
+      // that was sounding. The machine stops with the keys the way the
+      // user left them instead — what was pressed, pending or not, is
+      // given to the engine again, and a stopped transport takes it at
+      // once.
+      const bank = this.displayedBank();
+      const buttons = this.displayedButtons();
+      if (bank !== this.state.bank || buttons !== this.state.buttons) {
+        this.requestSelection(bank, buttons);
+      }
       return;
     }
     this.transportIntent = true;

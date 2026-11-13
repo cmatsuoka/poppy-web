@@ -290,6 +290,14 @@ export interface UserPattern {
 export type EngineCommand =
   | { type: 'start' }
   | { type: 'stop' }
+  /**
+   * Ask the worklet to re-report its sound state after the next render.
+   *
+   * A parked context does not render, so the sound state it last reported
+   * can be behind what the machine does once it is woken. The command is
+   * what makes the two sides agree again after a wake.
+   */
+  | { type: 'sync' }
   | { type: 'select'; bank: Bank; buttons: number }
   | { type: 'trigger'; instrument: number; velocity: number }
   | { type: 'tempo'; bpm: number }

@@ -29,6 +29,17 @@ const SOUNDING_HOLD_BLOCKS = Math.max(
 );
 /** The number of columns a user pattern holds. */
 const USER_PATTERN_COLUMNS = PATTERN_COLUMNS;
+/**
+ * The quietest thing that still counts as a sound.
+ *
+ * The engine renders integers, and a voice that dithers at the bottom of
+ * its range stays nonzero for a long time after it can be heard. Holding
+ * the sound state open for such a tail keeps the context awake and marks
+ * the tab as playing audio long after the machine went quiet, so anything
+ * at or under this level is treated as silence: it is far below the
+ * hearing threshold on any speaker.
+ */
+const AUDIBLE_FLOOR = 2;
 
 interface WorkletOptions {
   processorOptions?: {
@@ -137,7 +148,10 @@ class PoppyProcessor extends AudioWorkletProcessor {
       const index = frame * 2;
       const leftSample = samples[index] ?? 0;
       const rightSample = samples[index + 1] ?? 0;
-      if (leftSample !== 0 || rightSample !== 0) {
+      if (
+        Math.abs(leftSample) > AUDIBLE_FLOOR ||
+        Math.abs(rightSample) > AUDIBLE_FLOOR
+      ) {
         audible = true;
       }
       left[frame] = leftSample / 32768;
@@ -322,6 +336,12 @@ class PoppyProcessor extends AudioWorkletProcessor {
       }
       case 'stop':
         module._poppy_stop_rhythms(this.context);
+        break;
+      case 'sync':
+        // The context has just been woken after being parked, or the main
+        // thread wants the sound state again: the next render re-reports
+        // it whether it changed or not, so the two sides agree again.
+        this.reportSounding = true;
         break;
       case 'select': {
         this.readPanel();

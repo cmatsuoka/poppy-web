@@ -226,6 +226,11 @@ export class PoppyEngine {
 
   stop(): void {
     this.post({ type: 'stop' });
+    // Port messages are only delivered while the context renders, so a
+    // stop that arrives while the render thread is parked would sit in the
+    // queue unheard. Waking here also gives the idle poll a turn right
+    // away; the check now watches the transport state as well.
+    this.wake();
   }
 
   select(bank: Bank, buttons: number): void {
@@ -246,22 +251,29 @@ export class PoppyEngine {
     this.wake();
   }
 
+  /**
+   * The setters of the engine settings: the tempo, the master levels and
+   * the sound of every instrument.
+   *
+   * Each one posts its command alone, without a wake: the settings are
+   * taken the next time the engine renders, and a parked context stays
+   * parked. Waking on every knob turn lit the tab's playing-audio flag for
+   * a second over a machine that was stopped. The settings only matter
+   * while something plays, and the next start carries them over in order.
+   */
   setTempo(bpm: number): void {
     this.settings.tempo = Math.min(240, Math.max(1, Math.round(bpm)));
     this.post({ type: 'tempo', bpm: this.settings.tempo });
-    this.wake();
   }
 
   setVolume(value: number): void {
     this.settings.volume = value;
     this.post({ type: 'volume', value });
-    this.wake();
   }
 
   setBalance(value: number): void {
     this.settings.balance = value;
     this.post({ type: 'balance', value });
-    this.wake();
   }
 
   /**
@@ -275,7 +287,6 @@ export class PoppyEngine {
     }
     this.settings.instrGain[instrument] = value;
     this.post({ type: 'instrGain', instrument, value });
-    this.wake();
   }
 
   /**
@@ -290,7 +301,6 @@ export class PoppyEngine {
     }
     this.settings.instrPan[instrument] = value;
     this.post({ type: 'instrPan', instrument, value });
-    this.wake();
   }
 
   /**
@@ -306,7 +316,6 @@ export class PoppyEngine {
     }
     this.settings.instrTune[instrument] = value;
     this.post({ type: 'instrTune', instrument, value });
-    this.wake();
   }
 
   /**
@@ -322,7 +331,6 @@ export class PoppyEngine {
     }
     this.settings.instrDecay[instrument] = value;
     this.post({ type: 'instrDecay', instrument, value });
-    this.wake();
   }
 
   /** The center of the band-pass of an instrument, in Hz. */
@@ -332,7 +340,6 @@ export class PoppyEngine {
     }
     this.settings.instrCutoff[instrument] = value;
     this.post({ type: 'instrCutoff', instrument, value });
-    this.wake();
   }
 
   /**
@@ -347,7 +354,6 @@ export class PoppyEngine {
     }
     this.settings.instrHighpass[instrument] = value;
     this.post({ type: 'instrHighpass', instrument, value });
-    this.wake();
   }
 
   /** The reverb send of an instrument, Q16. */
@@ -357,7 +363,6 @@ export class PoppyEngine {
     }
     this.settings.instrFxSend[instrument] = value;
     this.post({ type: 'instrFxSend', instrument, value });
-    this.wake();
   }
 
   /**
@@ -367,7 +372,6 @@ export class PoppyEngine {
   setAccentGain(value: number): void {
     this.settings.accentGain = value;
     this.post({ type: 'accentGain', value });
-    this.wake();
   }
 
   /**
@@ -645,6 +649,11 @@ export class PoppyEngine {
         // A closed context cannot be resumed; the transport stays silent.
         return;
       }
+      // The worklet has spent the idle time without rendering, so the sound
+      // state it last reported can be behind what the machine does from
+      // here: ask it to re-report after the next render, so the gate and
+      // the park follow what actually sounds.
+      this.post({ type: 'sync' });
     }
     // A context that runs without producing a sound still makes the browser
     // mark the tab as playing audio, so an idle context is parked again.
@@ -674,22 +683,28 @@ export class PoppyEngine {
   /**
    * One turn of the park check.
    *
-   * The check never gives up on an idle machine: as long as no sound is
-   * reported and the context is there, it comes back every period until
-   * the machine sounds again. A one-shot timer could not say the same —
-   * one that went off while a `resume()` was still on its way found the
-   * context not running yet, gave up, and left the machine awake for good;
-   * the repeated look parks a context that wakes behind the panel's back
-   * as well.
+   * The check never gives up on an idle machine: as long as the context is
+   * there, it comes back every period. The park waits for two answers at
+   * once — the worklet's report of silence and the engine saying the
+   * transport is stopped — because the two can be behind each other while
+   * they converge, and a machine that reads as running but sits parked is
+   * stranded forever when only one of them is asked. The repeated look
+   * parks a context that was woken behind the panel's back as well.
    */
   private readonly parkCheck = (): void => {
     const context = this.context;
-    if (this.sounding || context === null || context.state === 'closed') {
-      // The report of a sound (or the end of the machine) stops the check,
-      // and the report of the last sound brings it back.
+    if (context === null || context.state === 'closed') {
+      // The end of the machine stops the check.
       return;
     }
+    // A woken context keeps getting the look: when the machine sounds or
+    // the engine reports a running transport, the timer is left alone and
+    // the next turn comes back — so even a sound report that got lost on
+    // its way cannot leave the context awake for good.
     this.idleSuspendTimer = setTimeout(this.parkCheck, IDLE_SUSPEND_DELAY);
+    if (this.sounding || this.panelState.running) {
+      return;
+    }
     if (context.state === 'running') {
       void context.suspend().catch(() => {
         // The context may have been closed in the meantime.
@@ -740,6 +755,17 @@ export class PoppyEngine {
     this.pending.push(command);
   }
 
+  /**
+   * Bring the engine to life for work whose answer has to come back now.
+   *
+   * Only the paths that do — the transport, the selections, the reads of
+   * patterns and user slots — call this. The setters of settings post
+   * alone, so a machine that is stopped and parked stays parked instead of
+   * the tab being marked as playing audio for a second on every knob turn.
+   *
+   * A control that is moved is a user gesture: it may bring a context that
+   * the browser suspended back to life.
+   */
   private wake(): void {
     void this.ensure().catch((error: unknown) => {
       const reason = error instanceof Error ? error : new Error(String(error));
@@ -784,10 +810,12 @@ export class PoppyEngine {
         this.sounding = event.on;
         this.setGateNoise(event.on);
         if (event.on) {
-          this.cancelIdleSuspend();
           // The parking timer may have gone off between a resume and this
           // report: the machine had started, but the timer did not know.
           // Waking the context here unparks it, and the machine follows.
+          // The timer itself is left running: the park check keeps its beat
+          // and skips the machine that sounds, so a sound report that got
+          // lost on its way cannot strand a stopped machine awake.
           void this.resume();
         } else {
           this.scheduleIdleSuspend();
