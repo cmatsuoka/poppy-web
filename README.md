@@ -1,7 +1,7 @@
 # poppy-web
 
 A browser recreation of a 1970s Japanese preset rhythm unit. The sound
-engine is [libpops](https://github.com/cmatsuoka/libpoppy), a small
+engine is [libpops](https://github.com/cmatsuoka/libpops), a small
 integer-only C library compiled to WebAssembly. Audio is generated entirely
 by libpops, no samples are used.
 

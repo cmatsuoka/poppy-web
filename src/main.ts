@@ -22,7 +22,7 @@ void engine.init();
 const footnote = document.createElement('p');
 footnote.className = 'footnote';
 const link = document.createElement('a');
-link.href = 'https://github.com/cmatsuoka/libpoppy';
+link.href = 'https://github.com/cmatsuoka/libpops';
 link.target = '_blank';
 link.rel = 'noreferrer';
 link.textContent = 'libpops';

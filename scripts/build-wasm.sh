@@ -14,7 +14,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
+LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpops.git}"
 # The commit still on the upstream main branch predates the libpops rename
 # (it carries mp7.h and the mp7_ symbols). The renamed tree is taken from
 # the sibling checkout until the rename is pushed; update this to the rename
