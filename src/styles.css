@@ -44,7 +44,7 @@
      the height of the line it belongs to. */
   --name-size: clamp(9px, 0.95vw, 12.5px);
   --name-line: calc(var(--name-size) * 1.45);
-  --names-drop: clamp(10px, 1.9vw, 26px);
+  --names-drop: clamp(6px, 1vw, 14px);
   --names-gap: clamp(9px, 1.35vw, 18px);
   --keys-gap: clamp(14px, 1.8vw, 26px);
   /* The condensed face the machine prints its names in: the rhythm
@@ -852,13 +852,13 @@ body {
   flex-direction: column;
   align-items: center;
   min-width: 0;
-  padding-top: clamp(2px, 0.8vw, 10px);
+  padding-top: clamp(1px, 0.6vw, 8px);
 }
 
 .tempo-ticks {
   position: absolute;
   top: calc(
-    clamp(2px, 0.8vw, 10px) + clamp(8px, 1.2vw, 16px) +
+    clamp(1px, 0.6vw, 8px) + clamp(6px, 1vw, 14px) +
       clamp(76px, 8vw, 98px) / 2 - clamp(104px, 10.8vw, 132px) / 2
   );
   left: 50%;
@@ -886,7 +886,7 @@ body {
   place-items: center;
   width: clamp(76px, 8vw, 98px);
   aspect-ratio: 1;
-  margin-top: clamp(8px, 1.2vw, 16px);
+  margin-top: clamp(6px, 1vw, 14px);
   border-radius: 50%;
   background:
     repeating-conic-gradient(
@@ -1292,7 +1292,9 @@ body {
 .rhythm-section {
   position: relative;
   padding-top: var(--names-drop);
-  padding-bottom: clamp(20px, 3.2vw, 46px);
+  /* The keys hang below the bed by their own height; the padding keeps
+     the tips of the keys off the bottom of the plate. */
+  padding-bottom: clamp(16px, 2.2vw, 32px);
 }
 
 .rhythm-legend {
