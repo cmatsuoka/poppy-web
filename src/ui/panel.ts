@@ -38,6 +38,7 @@ import { loadUserPatterns, saveUserPatterns } from './user-store';
 import { UserNames, defaultUserName } from './user-names';
 import { meterOfTimesig } from './meter';
 import { BandCode } from './band-code';
+import { printedWord } from './wordmark';
 
 const Q16 = 65536;
 
@@ -1532,10 +1533,7 @@ export class Panel {
 
     const brand = element('div', 'brand');
     const plate = element('div', 'brand-plate');
-    plate.append(
-      element('span', 'brand-name', 'libpoppy'),
-      element('span', 'brand-sub', 'rhythm demo'),
-    );
+    plate.append(printedWord('POPPY 7', 'brand-mark'));
     brand.append(plate);
 
     const faderBank = element('div', 'fader-bank');
