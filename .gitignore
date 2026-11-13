@@ -4,3 +4,6 @@ build/
 vendor/
 *.log
 .DS_Store
+
+# Local audio debug artifacts (recordings, capture dumps)
+poppy-*

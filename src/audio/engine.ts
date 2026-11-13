@@ -29,6 +29,11 @@ const GATE_NOISE_AMPLITUDE = 0.00173;
 const GATE_NOISE_SECONDS = 2;
 /** How long the floor takes to fade in or out, so it never clicks. */
 const GATE_NOISE_FADE = 0.02;
+/**
+ * How long the context keeps running after the last sound, so a command that
+ * was just posted is handled before the render thread is parked.
+ */
+const IDLE_SUSPEND_DELAY = 250;
 
 interface Settings {
   tempo: number;
@@ -103,6 +108,9 @@ export class PoppyEngine {
   private node: AudioWorkletNode | null = null;
   private gateNoise: AudioBufferSourceNode | null = null;
   private gateNoiseGain: GainNode | null = null;
+  private idleSuspendTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the worklet last reported that the machine makes a sound. */
+  private sounding = false;
   private starting: Promise<void> | null = null;
   private panelState: PanelState = { ...INITIAL_PANEL_STATE };
   private settings = defaultSettings();
@@ -173,6 +181,7 @@ export class PoppyEngine {
 
   async start(): Promise<void> {
     await this.ensure();
+    this.cancelIdleSuspend();
     this.setGateNoise(true);
     this.post({ type: 'start' });
     // The context may still be held back by the autoplay policy; the resume
@@ -416,6 +425,7 @@ export class PoppyEngine {
   }
 
   async dispose(): Promise<void> {
+    this.cancelIdleSuspend();
     this.gateNoise?.stop();
     this.gateNoise?.disconnect();
     this.gateNoise = null;
@@ -543,10 +553,10 @@ export class PoppyEngine {
   /**
    * Open or close the speaker-gate noise floor.
    *
-   * The floor is only needed while the machine sounds. An idle machine keeps
-   * the whole output at exact zeros, so the browser does not report the tab
-   * as playing audio. The fade reaches zero exactly, which a time-constant
-   * approach would not.
+   * The floor is only needed while the machine sounds. An idle machine
+   * falls silent and its context is parked (see `scheduleIdleSuspend()`),
+   * so nothing reports the tab as playing audio. The fade reaches zero
+   * exactly, which a time-constant approach would not.
    */
   private setGateNoise(on: boolean): void {
     const gain = this.gateNoiseGain;
@@ -594,13 +604,57 @@ export class PoppyEngine {
 
   private async resume(): Promise<void> {
     const context = this.context;
-    if (context === null || context.state === 'running') {
+    if (context === null) {
       return;
     }
-    try {
-      await context.resume();
-    } catch {
-      // A closed context cannot be resumed; the transport stays silent.
+    if (context.state !== 'running') {
+      try {
+        await context.resume();
+      } catch {
+        // A closed context cannot be resumed; the transport stays silent.
+        return;
+      }
+    }
+    // A context that runs without producing a sound still makes the browser
+    // mark the tab as playing audio, so an idle context is parked again.
+    this.scheduleIdleSuspend();
+  }
+
+  /**
+   * Park the render thread while the machine is idle.
+   *
+   * A running AudioContext keeps the tab marked as playing audio even when
+   * every sample it renders is zero, which is why the gate noise being
+   * silent is not enough. Suspending the context stops the rendering
+   * altogether: the browser drops the audio indicator and the audio thread
+   * spends nothing on an idle machine. A command or a gesture wakes it up
+   * again through `resume()`.
+   */
+  private scheduleIdleSuspend(): void {
+    if (this.sounding) {
+      return;
+    }
+    this.cancelIdleSuspend();
+    this.idleSuspendTimer = setTimeout(() => {
+      this.idleSuspendTimer = null;
+      const context = this.context;
+      if (
+        this.sounding ||
+        context === null ||
+        context.state !== 'running'
+      ) {
+        return;
+      }
+      void context.suspend().catch(() => {
+        // The context may have been closed in the meantime.
+      });
+    }, IDLE_SUSPEND_DELAY);
+  }
+
+  private cancelIdleSuspend(): void {
+    if (this.idleSuspendTimer !== null) {
+      clearTimeout(this.idleSuspendTimer);
+      this.idleSuspendTimer = null;
     }
   }
 
@@ -678,7 +732,17 @@ export class PoppyEngine {
         break;
       }
       case 'sounding':
+        this.sounding = event.on;
         this.setGateNoise(event.on);
+        if (event.on) {
+          this.cancelIdleSuspend();
+          // The parking timer may have gone off between a resume and this
+          // report: the machine had started, but the timer did not know.
+          // Waking the context here unparks it, and the machine follows.
+          void this.resume();
+        } else {
+          this.scheduleIdleSuspend();
+        }
         break;
       case 'error': {
         this.emitError(event.message);
