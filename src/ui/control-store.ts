@@ -39,6 +39,13 @@ export interface ControlPositions {
   /** The position of the five faders, in the order of the panel. */
   faders?: number[];
   /**
+   * Whether the band of knobs has been opened in the classic mode.
+   *
+   * The hidden sequence opens the band, and the band stays open: the
+   * machine comes up the way the user left it.
+   */
+  bandUnlocked?: boolean;
+  /**
    * The version of the memory positions of the band of knobs.
    *
    * The positions are read back only when they carry the version the
@@ -116,6 +123,9 @@ export function loadControlPositions(): ControlPositions {
   }
   if (isNumbers(record.faders)) {
     positions.faders = record.faders;
+  }
+  if (record.bandUnlocked === true) {
+    positions.bandUnlocked = true;
   }
   // The memory positions are read back only when they carry the version
   // the panel writes today: the positions of an older machine mean

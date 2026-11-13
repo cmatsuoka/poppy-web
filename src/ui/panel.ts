@@ -37,6 +37,7 @@ import { DEFAULT_RHYTHMS, defaultRhythm } from '../audio/default-rhythms';
 import { loadUserPatterns, saveUserPatterns } from './user-store';
 import { UserNames, defaultUserName } from './user-names';
 import { meterOfTimesig } from './meter';
+import { BandCode } from './band-code';
 
 const Q16 = 65536;
 
@@ -1056,6 +1057,24 @@ export class Panel {
   // engine again as soon as the engine has changed its state.
   private transportIntent = false;
 
+  /**
+   * The band of knobs is open in the classic mode.
+   *
+   * A hidden sequence opens it: the band of knobs belongs to the
+   * advanced mode, and the sequence is the way into it for a user who
+   * stays in the classic mode. The machine keeps playing the factory rhythms
+   * and the printed card stays a print; only the band of knobs comes
+   * out from under the black cover, and the knobs of the band are there
+   * to be turned.
+   *
+   * The band stays open: the machine comes up the way the user left
+   * it.
+   */
+  private bandUnlocked = false;
+
+  /** The hidden sequence that opens the band of knobs. */
+  private readonly bandCode = new BandCode(() => this.openBand());
+
   // The keys that are being held down. A pointer press belongs to the
   // pointer that made it, so a second finger can hold a second key; the
   // keyboard has a press of its own. The keyboard click must not be
@@ -1071,6 +1090,10 @@ export class Panel {
   constructor(engine: PoppyEngine, host: HTMLElement) {
     this.engine = engine;
     this.savedControls = loadControlPositions();
+    // A hidden sequence opens the band of knobs in the classic
+    // mode, and the band stays open: the machine comes up the way the user
+    // left it.
+    this.bandUnlocked = this.savedControls.bandUnlocked === true;
 
     this.root = element('div', 'stage');
 
@@ -1103,6 +1126,13 @@ export class Panel {
     // The controls are put back where they were left, so the machine comes
     // up the way the user left it.
     this.restoreControlPositions();
+
+    // The band of knobs was opened in the classic mode before: it is in
+    // charge of the machine, and the machine takes the settings of the
+    // memory position that is selected.
+    if (this.bandUnlocked) {
+      this.applyBandValues(this.bandValues);
+    }
 
     this.status = element('p', 'status');
     this.status.setAttribute('role', 'status');
@@ -1419,8 +1449,9 @@ export class Panel {
     this.renderBandMemory();
     // The knobs move to the settings of the position, and the engine
     // takes them over. The factory rhythms keep the settings the machine
-    // comes up with.
-    if (this.displayedSource() === PATTERN_SOURCE_USER) {
+    // comes up with, unless the band of knobs has been opened in the
+    // classic mode.
+    if (this.bandIsLive()) {
       this.applyBandValues(this.bandValues);
     }
     this.keepControlPositions();
@@ -1457,6 +1488,7 @@ export class Panel {
     this.controlWriter.update({
       tempo: this.tempoKnob.current,
       faders: this.faders.map((fader) => fader.current),
+      bandUnlocked: this.bandUnlocked,
       memoriesVersion: MEMORIES_VERSION,
       memories: this.bandMemories.map((memory) => ({ ...memory })),
       memory: this.bandMemory,
@@ -1763,6 +1795,13 @@ export class Panel {
       (event) => this.onShortcutKeyUp(event),
       true,
     );
+    // The hidden sequence is typed with the arrow keys of the
+    // keyboard. It is watched after the controls of the panel have had
+    // their say: an arrow that a control has taken is not a step of the
+    // sequence.
+    document.addEventListener('keydown', (event) =>
+      this.onBandCodeKeyDown(event),
+    );
     window.addEventListener('blur', () => this.shortcutKeys.clear());
 
     // The positions of the controls are written when they come to rest. A
@@ -1804,13 +1843,19 @@ export class Panel {
     if (this.displayedSource() === source) {
       return;
     }
+    // The hidden sequence is typed in the classic mode: the lever
+    // throws the source and the sequence starts over.
+    this.bandCode.reset();
     // The extended mode is left behind: a pattern that was written but
     // not saved goes back to the contents the browser holds.
     if (source === PATTERN_SOURCE_PRESET) {
       void this.discardUnsavedPatterns();
       // The factory rhythms are played with the settings the machine comes
-      // up with.
-      this.applyBandValues(this.bandDefaults);
+      // up with, unless the hidden sequence has opened the band of
+      // knobs: then the band is in charge, as it is in the advanced mode.
+      this.applyBandValues(
+        this.bandUnlocked ? this.bandValues : this.bandDefaults,
+      );
     } else {
       // The user patterns are played with the settings of the memory
       // position that is selected.
@@ -1868,6 +1913,100 @@ export class Panel {
       return;
     }
     this.requestSelection(bank, this.displayedButtons());
+    // The selector has moved, and the move is a step of the sequence
+    // that opens the band of knobs in the classic mode.
+    if (!this.bandUnlocked && this.displayedSource() === PATTERN_SOURCE_PRESET) {
+      this.bandCode.noteSelector(bank);
+    }
+  }
+
+  /**
+   * An arrow of the keyboard was pressed.
+   *
+   * The arrow is a step of the hidden sequence, which opens the band
+   * of knobs in the classic mode. The sequence is only typed in the
+   * classic mode: in the advanced mode the band is open already.
+   *
+   * An arrow that belongs to a control of the panel is not a step: the
+   * arrow keys of a fader, of the tempo knob and of the knobs of the band
+   * move those controls.
+   */
+  private onBandCodeKeyDown(event: KeyboardEvent): void {
+    if (
+      this.bandUnlocked ||
+      event.repeat ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.isComposing ||
+      this.isTypingTarget(event) ||
+      this.isCardTarget(event) ||
+      this.isControlTarget(event)
+    ) {
+      return;
+    }
+    if (this.displayedSource() !== PATTERN_SOURCE_PRESET) {
+      // The sequence is only typed in the classic mode: in the advanced
+      // mode the band of knobs is open already.
+      return;
+    }
+    // The arrows are typed with the A/B selector at A.
+    if (this.displayedBank() !== 0) {
+      return;
+    }
+    if (this.bandCode.noteArrow(event.key)) {
+      // The arrow is a step of the sequence: the page does not scroll.
+      event.preventDefault();
+    }
+  }
+
+  /**
+   * Whether the key belongs to a control of the panel.
+   *
+   * The arrow keys of a fader, of a knob and of the knobs of the band
+   * belong to that control: they move it and they are not a step of the
+   * sequence.
+   */
+  private isControlTarget(event: KeyboardEvent): boolean {
+    const target = event.target;
+    return (
+      target instanceof HTMLElement &&
+      target.getAttribute('role') === 'slider'
+    );
+  }
+
+  /**
+   * The band of knobs comes out from under the black cover.
+   *
+   * The hidden sequence opens the band in the classic mode: the
+   * machine keeps playing the factory rhythms and the printed card stays
+   * a print, but the band of knobs is there and it works.
+   */
+  private openBand(): void {
+    if (this.bandUnlocked) {
+      return;
+    }
+    this.bandUnlocked = true;
+    // The band is in charge of the machine: the settings of the memory
+    // position that is selected are the settings of the machine.
+    this.applyBandValues(this.bandValues);
+    this.renderSource();
+    this.keepControlPositions();
+    this.showStatus('The band of knobs is open in the classic mode', false);
+  }
+
+  /**
+   * Whether the band of knobs is in charge of the machine.
+   *
+   * The band belongs to the advanced mode, and the hidden sequence
+   * opens it in the classic mode as well. When the band is in charge, the
+   * settings of the memory position that is selected are the settings of
+   * the machine, and the knobs of the band move them.
+   */
+  private bandIsLive(): boolean {
+    return (
+      this.displayedSource() === PATTERN_SOURCE_USER || this.bandUnlocked
+    );
   }
 
   private onShortcutKeyDown(event: KeyboardEvent): void {
@@ -2655,15 +2794,22 @@ export class Panel {
   /**
    * The black cover and the mode lever follow the source: in the extended
    * mode the cover slides up and the write strip is there.
+   *
+   * The hidden sequence opens the band of knobs in the classic mode
+   * as well: the cover slides up there too, and the knobs of the band are
+   * there to be turned. The source does not change: the factory rhythms
+   * keep playing and the printed card stays a print.
    */
   private renderSource(): void {
     const extended = this.displayedSource() === PATTERN_SOURCE_USER;
+    const bandOpen = extended || this.bandUnlocked;
     this.cabinet.classList.toggle('is-extended', extended);
+    this.cabinet.classList.toggle('is-unlocked', this.bandUnlocked);
     this.modeSwitch.setAttribute(
       'aria-checked',
       extended ? 'true' : 'false',
     );
-    if (extended) {
+    if (bandOpen) {
       this.extendedSection.removeAttribute('inert');
     } else {
       this.extendedSection.setAttribute('inert', '');

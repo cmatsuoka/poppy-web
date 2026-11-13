@@ -161,8 +161,13 @@ body {
 
 /* In the extended mode the black cover slides back and comes to rest over
    the wooden border at the top of the cabinet. The write strip it hides
-   comes into view, and the faceplate below it does not move. */
-.cabinet.is-extended .deck {
+   comes into view, and the faceplate below it does not move.
+
+   The same happens in the classic mode when the hidden sequence has
+   opened the band of knobs: the cover slides back there too, and the
+   machine keeps playing the factory rhythms. */
+.cabinet.is-extended .deck,
+.cabinet.is-unlocked .deck {
   transform: translateY(calc(-1 * var(--section-height)));
   box-shadow:
     inset 0 2px 12px rgb(0 0 0 / 75%),
