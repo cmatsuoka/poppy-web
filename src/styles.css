@@ -36,6 +36,17 @@
   --lamp-b: #b03a20;
   --focus: #1b5a78;
   --gap: clamp(2px, 0.35vw, 6px);
+  /* The vertical rhythm of the printed names: the size of the print, the
+     height of a line of names, the space from the top of the section to
+     the first line, the space between the two lines of names and the
+     space from the lower line down to the key bed. The pilot lamps hang
+     beside the lines and follow the same rhythm, so every lamp burns at
+     the height of the line it belongs to. */
+  --name-size: clamp(9px, 0.95vw, 12.5px);
+  --name-line: calc(var(--name-size) * 1.45);
+  --names-drop: clamp(10px, 1.9vw, 26px);
+  --names-gap: clamp(9px, 1.35vw, 18px);
+  --keys-gap: clamp(14px, 1.8vw, 26px);
   /* The condensed face the machine prints its names in: the rhythm
      labels, the names on the pattern card and the marks of the mode
      lever. The face is vendored in src/fonts/; the narrow system faces
@@ -970,8 +981,9 @@ body {
 
 .tempo-readout {
   margin-top: 1px;
-  font-size: clamp(9px, 0.8vw, 12px);
-  font-weight: 800;
+  font-family: var(--print-name);
+  font-size: clamp(10px, 0.9vw, 13px);
+  font-weight: 400;
   letter-spacing: 0.08em;
   color: var(--ink);
 }
@@ -983,6 +995,9 @@ body {
   padding-bottom: 4px;
 }
 
+/* The block at the right of the top row carries the mode lever; the
+   pilot lamps and the bank lever hang lower, beside the lines of rhythm
+   names, in the rhythm section. */
 .lamp-block {
   display: grid;
   grid-template-columns: auto auto auto;
@@ -1001,14 +1016,14 @@ body {
 }
 
 .lamp-mark-a {
-  grid-column: 2;
-  grid-row: 2;
+  grid-column: 1;
+  grid-row: 1;
   background: var(--ink);
 }
 
 .lamp-mark-b {
-  grid-column: 2;
-  grid-row: 3;
+  grid-column: 1;
+  grid-row: 2;
   background: var(--red-ink);
 }
 
@@ -1049,13 +1064,13 @@ body {
 }
 
 .lamp-a {
-  grid-column: 1;
-  grid-row: 2;
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .lamp-b {
-  grid-column: 1;
-  grid-row: 3;
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .lamp-a.on::after {
@@ -1072,30 +1087,39 @@ body {
     inset 0 1px 2px rgb(255 255 255 / 55%);
 }
 
-/* The lamps and their marks sit with the bank lever, in the lower part of
-   the column. */
-.lamp-a,
-.lamp-b,
-.lamp-mark-a,
-.lamp-mark-b {
-  position: relative;
-  top: clamp(10px, 1.5vw, 22px);
+/*
+ * The pilot lamps and the bank lever hang beside the two lines of
+ * rhythm names. The rail is taken out of the flow: it stands over the
+ * column the start/stop switch stands in, and its two rows are the two
+ * lines of names themselves — the same custom properties size them — so
+ * every lamp burns exactly at the height of the line it belongs to, and
+ * the lever travels between the two lamps.
+ */
+.rhythm-lamps {
+  position: absolute;
+  top: var(--names-drop);
+  right: 0;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  grid-template-rows: var(--name-line) var(--name-line);
+  align-items: center;
+  column-gap: 10px;
+  row-gap: var(--names-gap);
 }
 
-/* The bank lever sits a little lower in the column, so the two levers
-   are further apart. The offset is taken out of the space below the
-   top row, so nothing else on the panel moves. */
+/* The bank lever stands between the two lamps: it spans both rows of
+   the rail and its center rides on the middle of the pair. It keeps a
+   little more air from the lamps than the lamps keep from their marks. */
 .bank-switch {
   grid-column: 3;
-  grid-row: 2 / 4;
+  grid-row: 1 / 3;
   display: flex;
   align-items: center;
   padding: 2px;
+  margin-left: clamp(5px, 0.7vw, 10px);
   border: 0;
   background: none;
   cursor: pointer;
-  position: relative;
-  top: clamp(10px, 1.5vw, 22px);
 }
 
 .lever-slot {
@@ -1215,7 +1239,8 @@ body {
 /* The printed marks of the mode lever: one at each end of its travel.
    They are taken out of the flow: the column the lamps stand in keeps its
    width, and the marks reach to the left over the empty row above the
-   lamps. They are printed in the same type as the rhythm labels. */
+   lamps. They are printed in the same type as the rhythm labels, which
+   the rule further down shares with the rhythm section. */
 .mode-marks {
   position: absolute;
   top: 2px;
@@ -1225,13 +1250,6 @@ body {
   flex-direction: column;
   align-items: flex-end;
   justify-content: space-between;
-  font-size: clamp(7px, 0.76vw, 10.5px);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.45;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--ink);
 }
 
 .mode-mark-user {
@@ -1258,8 +1276,8 @@ body {
   /* They sit just inside the ends of the switch. */
   margin: 8px 0;
   font-family: var(--print-name);
-  font-size: clamp(9px, 0.95vw, 12.5px);
-  font-weight: 700;
+  font-size: var(--name-size);
+  font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.45;
   text-transform: uppercase;
@@ -1273,7 +1291,7 @@ body {
 
 .rhythm-section {
   position: relative;
-  padding-top: clamp(16px, 2.6vw, 36px);
+  padding-top: var(--names-drop);
   padding-bottom: clamp(20px, 3.2vw, 46px);
 }
 
@@ -1281,6 +1299,9 @@ body {
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr)) minmax(0, 1.15fr);
   gap: var(--gap);
+  /* The two lines of names stand apart: the upper line belongs to the
+     black print and the black lamp, the lower one to the red. */
+  row-gap: var(--names-gap);
 }
 
 .legend-row {
@@ -1291,7 +1312,7 @@ body {
   overflow: hidden;
   text-align: center;
   font-family: var(--print-name);
-  font-size: clamp(9px, 0.95vw, 12.5px);
+  font-size: var(--name-size);
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.45;
@@ -1343,7 +1364,9 @@ body {
 }
 
 .keybed {
-  margin: clamp(10px, 1.2vw, 18px) calc(-1 * var(--plate-pad)) 0;
+  /* The lower line of names stands above the bed with room to spare:
+     the triangles printed on the faceplate live in that space. */
+  margin: var(--keys-gap) calc(-1 * var(--plate-pad)) 0;
   padding: 0 var(--plate-pad);
   background: linear-gradient(#1d1d1b, #0a0a09 78%);
   box-shadow:
@@ -2285,8 +2308,13 @@ body {
   }
 
   .legend-name {
-    font-size: 6px;
     letter-spacing: 0;
+  }
+
+  /* The rail of lamps follows the size of the print, so the lamps keep
+     burning at the height of their lines on the narrow layout too. */
+  :root {
+    --name-size: 6px;
   }
 
   .rhythm-key {

@@ -1647,19 +1647,11 @@ export class Panel {
 
     const right = element('div', 'right-controls');
     const lampBlock = element('div', 'lamp-block');
-    const markA = element('span', 'lamp-mark lamp-mark-a');
-    markA.setAttribute('aria-hidden', 'true');
-    const markB = element('span', 'lamp-mark lamp-mark-b');
-    markB.setAttribute('aria-hidden', 'true');
-    lampBlock.append(
-      element('span', 'lamp lamp-a'),
-      element('span', 'lamp lamp-b'),
-      markA,
-      markB,
-    );
 
     // The mode lever sits above the bank lever, in the same column: it
-    // picks the factory rhythms or the user patterns.
+    // picks the factory rhythms or the user patterns. The bank lever
+    // itself stands lower, beside the pilot lamps and the lines of
+    // rhythm names they belong to, and is built with the rhythm section.
     this.modeSwitch = element('button', 'mode-switch');
     this.modeSwitch.type = 'button';
     this.modeSwitch.setAttribute('role', 'switch');
@@ -1680,16 +1672,6 @@ export class Panel {
     );
     this.modeSwitch.append(modeMarks);
     lampBlock.append(this.modeSwitch);
-
-    this.bankSwitch = element('button', 'bank-switch');
-    this.bankSwitch.type = 'button';
-    this.bankSwitch.setAttribute('role', 'switch');
-    this.bankSwitch.setAttribute('aria-checked', 'false');
-    this.bankSwitch.setAttribute('aria-label', 'Rhythm bank A or B');
-    const bankSlot = element('span', 'lever-slot');
-    bankSlot.append(element('span', 'lever-arm'));
-    this.bankSwitch.append(bankSlot);
-    lampBlock.append(this.bankSwitch);
 
     right.append(lampBlock);
 
@@ -1776,7 +1758,34 @@ export class Panel {
     const keybed = element('div', 'keybed');
     keybed.append(keys);
 
-    section.append(legend, keybed);
+    // The pilot lamps and the bank lever hang beside the two lines of
+    // rhythm names: every lamp burns at the height of the line it
+    // belongs to, black beside the upper line and red beside the lower
+    // one, and the lever travels between the two lamps. The lamps stand
+    // over the column the start/stop switch stands in, the way the print
+    // of the machine does.
+    const lamps = element('div', 'rhythm-lamps');
+    const markA = element('span', 'lamp-mark lamp-mark-a');
+    markA.setAttribute('aria-hidden', 'true');
+    const markB = element('span', 'lamp-mark lamp-mark-b');
+    markB.setAttribute('aria-hidden', 'true');
+    this.bankSwitch = element('button', 'bank-switch');
+    this.bankSwitch.type = 'button';
+    this.bankSwitch.setAttribute('role', 'switch');
+    this.bankSwitch.setAttribute('aria-checked', 'false');
+    this.bankSwitch.setAttribute('aria-label', 'Rhythm bank A or B');
+    const bankSlot = element('span', 'lever-slot');
+    bankSlot.append(element('span', 'lever-arm'));
+    this.bankSwitch.append(bankSlot);
+    lamps.append(
+      element('span', 'lamp lamp-a'),
+      element('span', 'lamp lamp-b'),
+      markA,
+      markB,
+      this.bankSwitch,
+    );
+
+    section.append(legend, keybed, lamps);
     return section;
   }
 
