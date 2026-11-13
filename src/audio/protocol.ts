@@ -312,6 +312,7 @@ export type EngineEvent =
   | { type: 'panel'; state: PanelState }
   | { type: 'pattern'; bank: Bank; buttons: number; view: PatternView }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
+  | { type: 'sounding'; on: boolean }
   | { type: 'error'; message: string };
 
 /**

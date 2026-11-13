@@ -15,11 +15,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpops.git}"
-# The commit still on the upstream main branch predates the libpops rename
-# (it carries mp7.h and the mp7_ symbols). The renamed tree is taken from
-# the sibling checkout until the rename is pushed; update this to the rename
-# commit once it is upstream.
-LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-eb8f65f7fc3dc01c4de68a84daac418cf3a40d02}"
+# The rename to libpops, and the sound adjustments the panel is written
+# against, are upstream now. Update this deliberately: the API is still
+# moving.
+LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-f11bc09b8900d78b81b2068c23c8904c076bb944}"
 # The checkout of the library that carries the newest API.
 LIBPOPS_SIBLING="${LIBPOPS_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.

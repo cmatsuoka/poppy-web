@@ -19,6 +19,14 @@ import {
 
 const BLOCK_FRAMES = 128;
 const PANEL_INTERVAL = Math.max(1, Math.round(sampleRate / 20));
+/**
+ * How long the noise floor stays open after the last sound, so a decaying
+ * voice or a reverb tail is not cut off from the speaker-gate workaround.
+ */
+const SOUNDING_HOLD_BLOCKS = Math.max(
+  1,
+  Math.round((sampleRate * 0.3) / BLOCK_FRAMES),
+);
 /** The number of columns a user pattern holds. */
 const USER_PATTERN_COLUMNS = PATTERN_COLUMNS;
 
@@ -62,6 +70,11 @@ class PoppyProcessor extends AudioWorkletProcessor {
 
   private sincePanel = 0;
   private lastColumn = -1;
+  /** Whether the speaker-gate noise floor is open. */
+  private sounding = false;
+  private soundingHold = 0;
+  /** Ask for a sound-state report after a command, to re-sync the floor. */
+  private reportSounding = false;
   /** The scratch buffer the user patterns are written through. */
   private userNotesPtr = 0;
 
@@ -119,14 +132,21 @@ class PoppyProcessor extends AudioWorkletProcessor {
       return true;
     }
 
+    let audible = false;
     for (let frame = 0; frame < BLOCK_FRAMES; frame += 1) {
       const index = frame * 2;
-      left[frame] = (samples[index] ?? 0) / 32768;
-      right[frame] = (samples[index + 1] ?? 0) / 32768;
+      const leftSample = samples[index] ?? 0;
+      const rightSample = samples[index + 1] ?? 0;
+      if (leftSample !== 0 || rightSample !== 0) {
+        audible = true;
+      }
+      left[frame] = leftSample / 32768;
+      right[frame] = rightSample / 32768;
     }
 
     this.sincePanel += BLOCK_FRAMES;
     this.readPanel();
+    this.updateSounding(audible);
 
     // The playhead has to follow the grid closely, so a snapshot is posted
     // as soon as the column moves instead of waiting for the periodic
@@ -141,6 +161,31 @@ class PoppyProcessor extends AudioWorkletProcessor {
     }
 
     return true;
+  }
+
+  /**
+   * Track whether the machine is making a sound and tell the main thread to
+   * open or close the speaker-gate noise floor.
+   *
+   * The floor is not needed while the machine is idle, and leaving it on
+   * makes the browser mark the tab as playing audio even when the output is
+   * otherwise silent. A running transport keeps it open through the gaps
+   * between hits; a stopped one keeps it open until the last voice and the
+   * reverb tail have died away.
+   */
+  private updateSounding(audible: boolean): void {
+    if (this.panel.running || audible) {
+      this.soundingHold = SOUNDING_HOLD_BLOCKS;
+    } else if (this.soundingHold > 0) {
+      this.soundingHold -= 1;
+    }
+
+    const on = this.soundingHold > 0;
+    if (on !== this.sounding || this.reportSounding) {
+      this.reportSounding = false;
+      this.sounding = on;
+      this.emit({ type: 'sounding', on });
+    }
   }
 
   /**
@@ -267,6 +312,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
     switch (command.type) {
       case 'start': {
         this.readPanel();
+        this.reportSounding = true;
         module._poppy_select_rhythm(
           this.context,
           this.panel.bank,
@@ -279,6 +325,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
         break;
       case 'select': {
         this.readPanel();
+        this.reportSounding = true;
         const wasRunning = this.panel.running;
         // Use the worklet's own running snapshot: next-cycle scheduling
         // only makes sense while the transport is already running.
@@ -290,6 +337,7 @@ class PoppyProcessor extends AudioWorkletProcessor {
         break;
       }
       case 'trigger':
+        this.reportSounding = true;
         module._poppy_trigger(this.context, command.instrument, command.velocity);
         break;
       case 'tempo':

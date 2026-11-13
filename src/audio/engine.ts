@@ -27,6 +27,8 @@ const FALLBACK_SAMPLE_RATE = 48000;
  */
 const GATE_NOISE_AMPLITUDE = 0.00173;
 const GATE_NOISE_SECONDS = 2;
+/** How long the floor takes to fade in or out, so it never clicks. */
+const GATE_NOISE_FADE = 0.02;
 
 interface Settings {
   tempo: number;
@@ -100,6 +102,7 @@ export class PoppyEngine {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private gateNoise: AudioBufferSourceNode | null = null;
+  private gateNoiseGain: GainNode | null = null;
   private starting: Promise<void> | null = null;
   private panelState: PanelState = { ...INITIAL_PANEL_STATE };
   private settings = defaultSettings();
@@ -170,6 +173,7 @@ export class PoppyEngine {
 
   async start(): Promise<void> {
     await this.ensure();
+    this.setGateNoise(true);
     this.post({ type: 'start' });
     // The context may still be held back by the autoplay policy; the resume
     // promise then stays pending until a gesture unlocks the context.
@@ -200,11 +204,15 @@ export class PoppyEngine {
   }
 
   select(bank: Bank, buttons: number): void {
+    this.setGateNoise(true);
     this.post({ type: 'select', bank, buttons });
     this.wake();
   }
 
   trigger(instrument: number, down: boolean): void {
+    if (down) {
+      this.setGateNoise(true);
+    }
     this.post({
       type: 'trigger',
       instrument,
@@ -411,6 +419,8 @@ export class PoppyEngine {
     this.gateNoise?.stop();
     this.gateNoise?.disconnect();
     this.gateNoise = null;
+    this.gateNoiseGain?.disconnect();
+    this.gateNoiseGain = null;
     this.node?.disconnect();
     this.node = null;
     const context = this.context;
@@ -484,7 +494,13 @@ export class PoppyEngine {
 
       node.connect(context.destination);
       this.gateNoise = this.createGateNoise(context);
-      this.gateNoise.connect(context.destination);
+      this.gateNoiseGain = context.createGain();
+      // The floor is silent until the machine sounds: a running context that
+      // only emits zeros still makes the browser mark the tab as playing
+      // audio, and the workaround is only needed while something plays.
+      this.gateNoiseGain.gain.value = 0;
+      this.gateNoise.connect(this.gateNoiseGain);
+      this.gateNoiseGain.connect(context.destination);
       this.gateNoise.start();
       this.context = context;
       this.node = node;
@@ -522,6 +538,26 @@ export class PoppyEngine {
     source.buffer = buffer;
     source.loop = true;
     return source;
+  }
+
+  /**
+   * Open or close the speaker-gate noise floor.
+   *
+   * The floor is only needed while the machine sounds. An idle machine keeps
+   * the whole output at exact zeros, so the browser does not report the tab
+   * as playing audio. The fade reaches zero exactly, which a time-constant
+   * approach would not.
+   */
+  private setGateNoise(on: boolean): void {
+    const gain = this.gateNoiseGain;
+    const context = this.context;
+    if (gain === null || context === null) {
+      return;
+    }
+    const now = context.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(on ? 1 : 0, now + GATE_NOISE_FADE);
   }
 
   /**
@@ -641,6 +677,9 @@ export class PoppyEngine {
         }
         break;
       }
+      case 'sounding':
+        this.setGateNoise(event.on);
+        break;
       case 'error': {
         this.emitError(event.message);
         this.rejectAllPatternRequests(new Error(event.message));
