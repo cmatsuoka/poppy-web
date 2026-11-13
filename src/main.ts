@@ -1,5 +1,5 @@
 import './styles.css';
-import { LIBPOPPY_VERSION } from '../build/version';
+import { LIBPOPS_VERSION } from '../build/version';
 import { PoppyEngine } from './audio/engine';
 import { Panel } from './ui/panel';
 
@@ -25,7 +25,7 @@ const link = document.createElement('a');
 link.href = 'https://github.com/cmatsuoka/libpoppy';
 link.target = '_blank';
 link.rel = 'noreferrer';
-link.textContent = 'libpoppy';
-link.title = `libpoppy ${LIBPOPPY_VERSION}`;
-footnote.append('using ', link, ' ', LIBPOPPY_VERSION);
+link.textContent = 'libpops';
+link.title = `libpops ${LIBPOPS_VERSION}`;
+footnote.append('using ', link, ' ', LIBPOPS_VERSION);
 host.append(footnote);

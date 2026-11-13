@@ -2,27 +2,31 @@
 #
 # Fetch the engine and build the wasm glue.
 #
-# The engine is libpoppy. Its sources are taken from LIBPOPPY_SOURCE and
-# copied into LIBPOPPY_DIR, where they are compiled. The source tree is
+# The engine is libpops. Its sources are taken from LIBPOPS_SOURCE and
+# copied into LIBPOPS_DIR, where they are compiled. The source tree is
 # never written to: it may be a checkout that belongs to somebody else.
 #
 # The source is the sibling checkout of the library when there is one
 # (../minipops), because it carries the newest API. Otherwise the pinned
-# commit is fetched into vendor/libpoppy-src. Update LIBPOPPY_COMMIT
+# commit is fetched into vendor/libpops-src. Update LIBPOPS_COMMIT
 # deliberately: the API is still moving.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIBPOPPY_REPO="${LIBPOPPY_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
-LIBPOPPY_COMMIT="${LIBPOPPY_COMMIT:-eb8f65f7fc3dc01c4de68a84daac418cf3a40d02}"
+LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpoppy.git}"
+# The commit still on the upstream main branch predates the libpops rename
+# (it carries mp7.h and the mp7_ symbols). The renamed tree is taken from
+# the sibling checkout until the rename is pushed; update this to the rename
+# commit once it is upstream.
+LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-eb8f65f7fc3dc01c4de68a84daac418cf3a40d02}"
 # The checkout of the library that carries the newest API.
-LIBPOPPY_SIBLING="${LIBPOPPY_SIBLING:-$ROOT/../minipops}"
+LIBPOPS_SIBLING="${LIBPOPS_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.
-LIBPOPPY_SOURCE="${LIBPOPPY_SOURCE:-}"
+LIBPOPS_SOURCE="${LIBPOPS_SOURCE:-}"
 # The sources the build actually compiles: a copy of the sources above with
 # the local patches applied.
-LIBPOPPY_DIR="${LIBPOPPY_DIR:-$ROOT/vendor/libpoppy}"
+LIBPOPS_DIR="${LIBPOPS_DIR:-$ROOT/vendor/libpops}"
 EMCC="${EMCC:-emcc}"
 OUT_DIR="$ROOT/build"
 
@@ -40,57 +44,57 @@ EOF
 fi
 
 # Where the pristine sources come from.
-if [ -z "$LIBPOPPY_SOURCE" ]; then
-    if [ -f "$LIBPOPPY_SIBLING/include/mp7.h" ]; then
+if [ -z "$LIBPOPS_SOURCE" ]; then
+    if [ -f "$LIBPOPS_SIBLING/include/pops.h" ]; then
         # The sibling checkout is the working copy of the library, and it
         # carries the API this panel is written against.
-        LIBPOPPY_SOURCE="$LIBPOPPY_SIBLING"
+        LIBPOPS_SOURCE="$LIBPOPS_SIBLING"
     else
-        LIBPOPPY_SOURCE="$ROOT/vendor/libpoppy-src"
+        LIBPOPS_SOURCE="$ROOT/vendor/libpops-src"
     fi
 fi
 
-if [ ! -f "$LIBPOPPY_SOURCE/include/mp7.h" ]; then
+if [ ! -f "$LIBPOPS_SOURCE/include/pops.h" ]; then
     # No local checkout: fetch the pinned commit.
-    if [ ! -d "$LIBPOPPY_SOURCE/.git" ]; then
-        mkdir -p "$(dirname "$LIBPOPPY_SOURCE")"
-        git clone "$LIBPOPPY_REPO" "$LIBPOPPY_SOURCE"
+    if [ ! -d "$LIBPOPS_SOURCE/.git" ]; then
+        mkdir -p "$(dirname "$LIBPOPS_SOURCE")"
+        git clone "$LIBPOPS_REPO" "$LIBPOPS_SOURCE"
     fi
 
-    if ! git -C "$LIBPOPPY_SOURCE" fetch --depth 1 origin "$LIBPOPPY_COMMIT"; then
+    if ! git -C "$LIBPOPS_SOURCE" fetch --depth 1 origin "$LIBPOPS_COMMIT"; then
         cat >&2 <<EOF
 error: the pinned engine commit could not be fetched.
 
-  $LIBPOPPY_COMMIT
+  $LIBPOPS_COMMIT
 
 The commit has to be in the upstream repository:
 
-  git -C $LIBPOPPY_SOURCE fetch origin $LIBPOPPY_COMMIT
+  git -C $LIBPOPS_SOURCE fetch origin $LIBPOPS_COMMIT
 
 A local checkout of the library can be used instead:
 
-  LIBPOPPY_SOURCE=/path/to/libpoppy npm run build:wasm
+  LIBPOPS_SOURCE=/path/to/libpops npm run build:wasm
 EOF
         exit 1
     fi
     # The checkout is forced: the tree carries the local patches below, and
     # a pinned commit that moves on would otherwise run into them.
-    git -C "$LIBPOPPY_SOURCE" checkout --force --detach "$LIBPOPPY_COMMIT"
+    git -C "$LIBPOPS_SOURCE" checkout --force --detach "$LIBPOPS_COMMIT"
 fi
 
-if [ ! -d "$LIBPOPPY_SOURCE/src" ]; then
-    echo "error: the library sources are missing: $LIBPOPPY_SOURCE" >&2
+if [ ! -d "$LIBPOPS_SOURCE/src" ]; then
+    echo "error: the library sources are missing: $LIBPOPS_SOURCE" >&2
     exit 1
 fi
 
 # The build compiles a copy of the sources, so the checkout the sources
 # come from stays untouched.
-rm -rf "$LIBPOPPY_DIR"
-mkdir -p "$LIBPOPPY_DIR"
-cp -R "$LIBPOPPY_SOURCE/include" "$LIBPOPPY_DIR/include"
-cp -R "$LIBPOPPY_SOURCE/src" "$LIBPOPPY_DIR/src"
-if [ -f "$LIBPOPPY_SOURCE/LICENSE" ]; then
-    cp "$LIBPOPPY_SOURCE/LICENSE" "$LIBPOPPY_DIR/LICENSE"
+rm -rf "$LIBPOPS_DIR"
+mkdir -p "$LIBPOPS_DIR"
+cp -R "$LIBPOPS_SOURCE/include" "$LIBPOPS_DIR/include"
+cp -R "$LIBPOPS_SOURCE/src" "$LIBPOPS_DIR/src"
+if [ -f "$LIBPOPS_SOURCE/LICENSE" ]; then
+    cp "$LIBPOPS_SOURCE/LICENSE" "$LIBPOPS_DIR/LICENSE"
 fi
 
 # The engine is built as it comes: the panel is written against the API of
@@ -100,15 +104,15 @@ mkdir -p "$OUT_DIR"
 
 # The version of the engine that was just taken, so the panel can name the
 # library it is running.
-VERSION_HEADER="$LIBPOPPY_DIR/include/mp7.h"
+VERSION_HEADER="$LIBPOPS_DIR/include/pops.h"
 
 read_version() {
     awk -v key="$1" '$1 == "#define" && $2 == key { print $3; exit }' "$VERSION_HEADER"
 }
 
-VERSION_MAJOR="$(read_version MP7_VERSION_MAJOR)"
-VERSION_MINOR="$(read_version MP7_VERSION_MINOR)"
-VERSION_PATCH="$(read_version MP7_VERSION_PATCH)"
+VERSION_MAJOR="$(read_version POPS_VERSION_MAJOR)"
+VERSION_MINOR="$(read_version POPS_VERSION_MINOR)"
+VERSION_PATCH="$(read_version POPS_VERSION_PATCH)"
 
 if [ -z "$VERSION_MAJOR" ] || [ -z "$VERSION_MINOR" ] || [ -z "$VERSION_PATCH" ]; then
     echo "error: could not read the library version from $VERSION_HEADER" >&2
@@ -117,24 +121,24 @@ fi
 
 cat > "$OUT_DIR/version.ts" <<EOF
 // Generated by scripts/build-wasm.sh - do not edit.
-export const LIBPOPPY_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
+export const LIBPOPS_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
 EOF
 
-EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_instr_decay","_poppy_set_instr_cutoff","_poppy_set_instr_fx_send","_poppy_set_accent_gain","_poppy_panel_state","_poppy_selection_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
+EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_instr_tune","_poppy_set_instr_decay","_poppy_set_instr_cutoff","_poppy_set_instr_fx_send","_poppy_set_accent_gain","_poppy_panel_state","_poppy_selection_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
 
 # The extended build of the engine: it carries the 20 user pattern slots and
 # the switch that points the sequencer at them, and the reverb bus that the
 # SEND knob of the band sends to. The panel needs them all, so the macros
 # are always on here.
-LIBPOPPY_DEFS='-DLIBPOPPY_EXTRA -DLIBPOPPY_FX_REVERB'
+LIBPOPS_DEFS='-DLIBPOPS_EXTRA -DLIBPOPS_FX_REVERB'
 
 # shellcheck disable=SC2086
 "$EMCC" \
     "$ROOT/wasm/poppy_wasm.c" \
-    "$LIBPOPPY_DIR"/src/*.c \
-    -I"$LIBPOPPY_DIR/include" \
-    -I"$LIBPOPPY_DIR/src" \
-    $LIBPOPPY_DEFS \
+    "$LIBPOPS_DIR"/src/*.c \
+    -I"$LIBPOPS_DIR/include" \
+    -I"$LIBPOPS_DIR/src" \
+    $LIBPOPS_DEFS \
     -std=c99 -O3 \
     --no-entry \
     -o "$OUT_DIR/poppy.mjs" \
@@ -150,4 +154,4 @@ LIBPOPPY_DEFS='-DLIBPOPPY_EXTRA -DLIBPOPPY_FX_REVERB'
     -sEXPORTED_FUNCTIONS="$EXPORTED_FUNCTIONS" \
     -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU16,HEAP32
 
-echo "built $OUT_DIR/poppy.mjs and $OUT_DIR/poppy.wasm (libpoppy ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH})"
+echo "built $OUT_DIR/poppy.mjs and $OUT_DIR/poppy.wasm (libpops ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH})"

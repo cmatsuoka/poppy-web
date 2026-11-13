@@ -4,9 +4,20 @@ import {
   BAND_INSTRUMENT_COUNT,
   INITIAL_PANEL_STATE,
   INSTRUMENT_NAMES,
+  INSTR_BASS,
+  INSTR_CLAVES,
+  INSTR_CONGA,
+  INSTR_COWBELL,
+  INSTR_CYMBAL_1,
+  INSTR_CYMBAL_2,
   INSTR_HIHAT,
+  INSTR_LARGE_BONGO,
+  INSTR_QUIJADA,
+  INSTR_RIMSHOT,
+  INSTR_SMALL_BONGO,
   INSTR_SNARE_1,
   INSTR_SNARE_2,
+  INSTR_TAMBORINE,
   PATTERN_ACCENT_BIT,
   PATTERN_COLUMNS,
   PATTERN_SOURCE_PRESET,
@@ -53,12 +64,24 @@ const Q16 = 65536;
  *
  * The engine takes the decay of a voice as a multiplier of the decay it
  * comes up with, so the knob of the panel, which is in milliseconds,
- * turns one into the other.
+ * turns one into the other. Every voice takes a decay but the Guiro: its
+ * length is the gate the rhythm holds open, so it has none to scale.
  */
 const FACTORY_DECAY_MS: Readonly<Record<number, number>> = {
+  [INSTR_BASS]: 200,
   [INSTR_SNARE_1]: 400,
   [INSTR_SNARE_2]: 80,
+  [INSTR_SMALL_BONGO]: 50,
+  [INSTR_LARGE_BONGO]: 50,
+  [INSTR_CONGA]: 250,
+  [INSTR_COWBELL]: 50,
+  [INSTR_CLAVES]: 4,
   [INSTR_HIHAT]: 20,
+  [INSTR_RIMSHOT]: 1,
+  [INSTR_CYMBAL_1]: 200,
+  [INSTR_CYMBAL_2]: 200,
+  [INSTR_TAMBORINE]: 80,
+  [INSTR_QUIJADA]: 300,
 };
 
 /**
@@ -74,18 +97,33 @@ const FACTORY_CUTOFF_HZ: Readonly<Record<number, number>> = {
 };
 
 /**
- * Whether the engine takes the decay and the cut-off of a voice.
+ * Whether the engine takes the cut-off of a voice.
  *
  * The snare 1, the snare 2 and the hi-hat are the voices the extended
- * build of the engine exposes them for; every other voice has no knob
- * for them and the two knobs stand dimmed for it.
+ * build of the engine exposes it for; every other voice has no knob for
+ * it and the knob stands dimmed. The decay is a wider thing: the engine
+ * takes it of every voice the selector can reach for.
  */
-function hasVoiceParams(instrument: number): boolean {
+function hasCutoff(instrument: number): boolean {
   return (
     instrument === INSTR_SNARE_1 ||
     instrument === INSTR_SNARE_2 ||
     instrument === INSTR_HIHAT
   );
+}
+
+/**
+ * The range the cut-off knob takes for an instrument.
+ *
+ * The hi-hat's band-pass cannot go below its factory high-pass, so its
+ * range starts higher than the range of the snares. The bounds are used
+ * both by the knob and when a stored memory position is brought back into
+ * the shape of today, so the knob and the engine cannot disagree.
+ */
+function cutoffBounds(instrument: number): { min: number; max: number } {
+  return instrument === INSTR_HIHAT
+    ? { min: 2000, max: 15000 }
+    : { min: 1000, max: 15000 };
 }
 
 /**
@@ -103,17 +141,13 @@ type BandParam = 'vol' | 'pan' | 'tone' | 'filter' | 'decay' | 'send';
 
 /**
  * The settings of one instrument inside a memory position.
- *
- * The tone is not among them: it has nothing in the engine to reach for
- * yet, so it stands where it comes up and the browser keeps nothing of
- * it.
  */
 interface InstrumentSettings {
   /** The level, from silence to twice the level the voice comes up with. */
   vol: number;
   /** The place in the stereo field: -1 is hard left, 1 is hard right. */
   pan: number;
-  /** The tone. The engine exposes none yet, so it stands at its middle. */
+  /** The tone, as a multiplier of what the engine pitches in the voice. */
   tone: number;
   /** The center of the band-pass, in hertz. */
   filter: number;
@@ -141,7 +175,7 @@ function defaultInstrumentSettings(instrument: number): InstrumentSettings {
   return {
     vol: 1,
     pan: 0,
-    tone: 0.5,
+    tone: 1,
     filter: FACTORY_CUTOFF_HZ[instrument] ?? 5500,
     decay: 1,
     send: 0,
@@ -192,6 +226,8 @@ interface BandParamKnob {
   bounds: (instrument: number) => { min: number; max: number };
   /** The value the engine comes up with. */
   defaultValue: (instrument: number) => number;
+  /** The shape the dial travels with; a straight line by default. */
+  taper?: 'linear' | 'geometric';
   /** Whether the engine takes the parameter from this instrument. */
   supported: (instrument: number) => boolean;
   /** What the value is called; it names the instrument it belongs to. */
@@ -244,29 +280,34 @@ function bandParamKnobs(engine: PoppyEngine): BandParamKnob[] {
     {
       param: 'tone',
       label: 'TONE',
-      ariaLabel: 'Tone of the selected instrument, not wired yet',
-      bounds: () => ({ min: 0, max: 1 }),
-      defaultValue: () => 0.5,
-      // The engine exposes no tone yet: the knob stands dimmed until the
-      // library carries one, and the machine keeps nothing of it.
-      supported: () => false,
-      valueText: () => '—',
-      apply: () => {},
+      ariaLabel: 'Tone of the selected instrument',
+      // The knob is a multiplier of what the engine pitches in the
+      // voice: half of it and twice it, one octave either side, with
+      // the factory tone in the middle of it. The travel is even in
+      // octaves, so the middle of the dial is the factory tone. The
+      // engine takes it for every instrument, and it does not reach
+      // the pitch alone: a voice whose tone carries a band-pass moves
+      // the center of it as well.
+      bounds: () => ({ min: 0.5, max: 2 }),
+      defaultValue: () => 1,
+      taper: 'geometric',
+      supported: () => true,
+      valueText: (value) => `${value.toFixed(2)}x`,
+      apply: (value, instrument) => {
+        engine.setInstrumentTune(instrument, Math.round(value * Q16));
+      },
     },
     {
       param: 'filter',
-      label: 'FILTER',
+      label: 'CUTOFF',
       ariaLabel: 'Cut-off of the selected instrument',
       // The cut-off is the center of the band-pass. The hi-hat's
       // band-pass cannot go below its factory high-pass at 1 kHz.
-      bounds: (instrument) =>
-        instrument === INSTR_HIHAT
-          ? { min: 2000, max: 15000 }
-          : { min: 1000, max: 15000 },
+      bounds: cutoffBounds,
       defaultValue: (instrument) => FACTORY_CUTOFF_HZ[instrument] ?? 5500,
-      supported: hasVoiceParams,
+      supported: hasCutoff,
       valueText: (value, instrument) =>
-        hasVoiceParams(instrument) ? `${(value / 1000).toFixed(1)} kHz` : '—',
+        hasCutoff(instrument) ? `${(value / 1000).toFixed(1)} kHz` : '—',
       apply: (value, instrument) => {
         engine.setInstrumentCutoff(instrument, Math.round(value));
       },
@@ -276,22 +317,24 @@ function bandParamKnobs(engine: PoppyEngine): BandParamKnob[] {
       label: 'DECAY',
       ariaLabel: 'Decay of the selected instrument',
       // The knob is a multiplier of the decay the voice comes up with:
-      // a quarter of it and four times it, with the factory decay in the
-      // middle of it.
-      bounds: () => ({ min: 0.25, max: 4 }),
+      // a fifth of it and five times it, with the factory decay in the
+      // middle of it. The travel is even in ratios, so the middle of the
+      // dial is the factory decay. The engine takes the decay of every
+      // instrument the selector can pick; the Guiro, whose length is the
+      // gate the rhythm holds open, has none to scale.
+      bounds: () => ({ min: 0.2, max: 5 }),
       defaultValue: () => 1,
-      supported: hasVoiceParams,
+      taper: 'geometric',
+      supported: () => true,
       valueText: (value, instrument) =>
-        hasVoiceParams(instrument)
-          ? `${Math.round((FACTORY_DECAY_MS[instrument] ?? 0) * value)} ms`
-          : '—',
+        `${Math.round((FACTORY_DECAY_MS[instrument] ?? 0) * value)} ms`,
       apply: (value, instrument) => {
         engine.setInstrumentDecay(instrument, Math.round(value * Q16));
       },
     },
     {
       param: 'send',
-      label: 'SEND',
+      label: 'REVERB',
       ariaLabel: 'Reverb send of the selected instrument',
       bounds: () => ({ min: 0, max: 1 }),
       defaultValue: () => 0,
@@ -305,11 +348,20 @@ function bandParamKnobs(engine: PoppyEngine): BandParamKnob[] {
 }
 
 /**
- * How long a key has to be held down before the press counts as a long
- * press. A short press picks a single rhythm, a long press adds to the
- * selection.
+ * How long a control has to be held down before the press counts as a
+ * long press. A short press on a rhythm key picks a single rhythm, a long
+ * press adds to the selection, and the reset button takes a long press
+ * before it puts the settings back.
  */
 const LONG_PRESS_MS = 500;
+
+/**
+ * How long the reset button has to be held down before it puts the knobs
+ * of the selected memory position back to their defaults. It is longer
+ * than the long press of the keys: the reset throws the settings away, so
+ * it takes a deliberate hold.
+ */
+const RESET_HOLD_MS = 1500;
 
 /**
  * How many keys may be held down at the same time. Two is what a chord
@@ -781,6 +833,17 @@ interface MiniKnobOptions {
    * wheel move it from one detent to the next.
    */
   steps?: number;
+  /**
+   * The shape the dial travels with.
+   *
+   * A knob with a geometric taper travels even in octaves: the dial turns
+   * multiplicatively over the range, so the values double or halve over
+   * equal parts of the travel and the middle of the travel stands at the
+   * value between the two. It is what the tone knob wants: the tone
+   * doubles and halves, and the factory tone stands in the middle. Both
+   * ends of the range have to be above zero.
+   */
+  taper?: 'linear' | 'geometric';
   /** Whether the knob takes an input at all. */
   enabled?: boolean;
   onInput: (value: number) => void;
@@ -808,9 +871,17 @@ class MiniKnob {
   private max: number;
   /** How many detents the knob slots into; zero turns freely. */
   private readonly steps: number;
+  /** The shape the dial travels with: a straight line by default. */
+  private readonly taper: 'linear' | 'geometric';
   private enabled: boolean;
   /** The knob is being dragged: a stepped one slots in on the release. */
   private dragging = false;
+  /**
+   * The detent a stepped knob last told the panel about while it was
+   * dragged, so the settings behind it follow the instrument under the
+   * finger and not only the one the knob is let go at.
+   */
+  private stepNotified: number | null = null;
   private readonly onInput: (value: number) => void;
   private readonly valueText: (value: number) => string;
   private readonly showReadout: boolean;
@@ -820,6 +891,7 @@ class MiniKnob {
     this.max = options.max;
     this.value = clamp(options.value, this.min, this.max);
     this.steps = options.steps ?? 0;
+    this.taper = options.taper ?? 'linear';
     this.enabled = options.enabled ?? true;
     this.onInput = options.onInput;
     this.valueText = options.valueText;
@@ -850,14 +922,15 @@ class MiniKnob {
     this.element.append(this.caption);
 
     let dragStartY = 0;
-    let dragStartValue = 0;
+    let dragStartTravel = 0;
     this.dial.addEventListener('pointerdown', (event) => {
       if (!this.enabled) {
         return;
       }
       this.dragging = true;
       dragStartY = event.clientY;
-      dragStartValue = this.value;
+      dragStartTravel = this.travelOf(this.value);
+      this.stepNotified = this.steps > 0 ? this.stepOf(this.value) : null;
       this.dial.setPointerCapture(event.pointerId);
       this.dial.focus();
     });
@@ -868,13 +941,20 @@ class MiniKnob {
       // The knob turns with the finger, so the drag is measured in the
       // size the knob is seen at, not in the size it is laid out in. A
       // stepped knob travels freely while it is held and slots itself
-      // into a detent when it is released.
-      const travel = (dragStartY - event.clientY) / this.scale();
-      this.set(
-        dragStartValue + (travel / MINI_KNOB_TRAVEL) * (this.max - this.min),
-        this.steps === 0,
-        this.steps === 0,
-      );
+      // into a detent when it is released. The detent under the finger
+      // is reported as it changes, so what the knob selects follows the
+      // turn and not only the end of it.
+      const travel =
+        dragStartTravel + (dragStartY - event.clientY) / this.scale() / MINI_KNOB_TRAVEL;
+      const value = this.valueOf(travel);
+      this.set(value, this.steps === 0, this.steps === 0);
+      if (this.steps > 0) {
+        const step = this.stepOf(value);
+        if (step !== this.stepNotified) {
+          this.stepNotified = step;
+          this.onInput(value);
+        }
+      }
     });
     this.dial.addEventListener('pointerup', (event) => {
       this.dial.releasePointerCapture(event.pointerId);
@@ -892,7 +972,10 @@ class MiniKnob {
         }
         event.preventDefault();
         const step = this.step() * (event.shiftKey ? 10 : 1);
-        this.set(this.value + (event.deltaY < 0 ? step : -step), true);
+        this.set(
+          this.valueOf(this.travelOf(this.value) + (event.deltaY < 0 ? step : -step)),
+          true,
+        );
       },
       { passive: false },
     );
@@ -901,15 +984,16 @@ class MiniKnob {
         return;
       }
       const step = this.step() * (event.shiftKey ? 10 : 1);
+      const travel = this.travelOf(this.value);
       let next: number | null = null;
       if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-        next = this.value + step;
+        next = this.valueOf(travel + step);
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-        next = this.value - step;
+        next = this.valueOf(travel - step);
       } else if (event.key === 'PageUp') {
-        next = this.value + step * 10;
+        next = this.valueOf(travel + step * 10);
       } else if (event.key === 'PageDown') {
-        next = this.value - step * 10;
+        next = this.valueOf(travel - step * 10);
       } else if (event.key === 'Home') {
         next = this.min;
       } else if (event.key === 'End') {
@@ -933,8 +1017,9 @@ class MiniKnob {
   set(value: number, notify: boolean, snap = true): void {
     let next = clamp(value, this.min, this.max);
     if (snap && this.steps > 0) {
-      const span = (this.max - this.min) / (this.steps - 1);
-      next = this.min + Math.round((next - this.min) / span) * span;
+      const span = 1 / (this.steps - 1);
+      const travel = Math.round(this.travelOf(next) / span) * span;
+      next = clamp(this.valueOf(travel), this.min, this.max);
     }
     const changed = next !== this.value;
     this.value = next;
@@ -994,15 +1079,48 @@ class MiniKnob {
     this.dragging = false;
     if (this.steps > 0) {
       this.set(this.value, true);
+      this.stepNotified = null;
     }
   }
 
-  /** How much one step of the arrow keys moves the knob. */
+  /** The detent a stepped knob is nearest to, as an index. */
+  private stepOf(value: number): number {
+    return Math.round(this.travelOf(value) * (this.steps - 1));
+  }
+
+  /**
+   * How much one step of the arrow keys moves the knob, as a part of the
+   * travel: a hundredth of the dial for a knob that turns freely, one
+   * detent for a knob that slots into them.
+   */
   private step(): number {
     if (this.steps > 0) {
-      return (this.max - this.min) / (this.steps - 1);
+      return 1 / (this.steps - 1);
     }
-    return (this.max - this.min) / 100;
+    return 1 / 100;
+  }
+
+  /**
+   * The travel the dial stands at, between 0 and 1, for a value.
+   *
+   * A knob with a geometric taper travels even in octaves, so the value
+   * is taken back along the shape of the range: the value the middle of
+   * the travel stands at covers half of the dial.
+   */
+  private travelOf(value: number): number {
+    if (this.taper === 'geometric' && this.min > 0 && this.max > 0) {
+      return Math.log2(value / this.min) / Math.log2(this.max / this.min);
+    }
+    return (value - this.min) / (this.max - this.min);
+  }
+
+  /** The value the dial stands at, for a travel between 0 and 1. */
+  private valueOf(travel: number): number {
+    const span = clamp(travel, 0, 1);
+    if (this.taper === 'geometric' && this.min > 0 && this.max > 0) {
+      return this.min * Math.pow(this.max / this.min, span);
+    }
+    return this.min + (this.max - this.min) * span;
   }
 
   /**
@@ -1020,13 +1138,12 @@ class MiniKnob {
 
   private render(): void {
     const range = this.max - this.min;
-    const ratio = range === 0 ? 0 : (this.value - this.min) / range;
+    const ratio = range === 0 ? 0 : this.travelOf(this.value);
     this.dial.style.setProperty('--angle', `${-135 + ratio * 270}deg`);
     if (this.steps > 0) {
-      const span = range / (this.steps - 1);
       this.dial.setAttribute(
         'aria-valuenow',
-        String(Math.round((this.value - this.min) / span)),
+        String(Math.round(ratio * (this.steps - 1))),
       );
     } else {
       this.dial.setAttribute('aria-valuenow', String(Math.round(this.value)));
@@ -1379,9 +1496,9 @@ export class Panel {
    * It is a row of eight knobs, a square of four buttons that pick the
    * memory position of the knobs, and a button that puts the knobs of the
    * selected position back. The first knob carries the accent gain, the
-   * second picks the instrument the six knobs behind it act on, and the
-   * six carry the level, the place in the stereo field, the tone, the
-   * cut-off, the decay and the reverb send of that instrument. The user
+    * second picks the instrument the six knobs behind it act on, and the
+    * six carry the level, the place in the stereo field, the tone, the
+    * cut-off, the decay and the reverb send of that instrument. The user
    * patterns are written on the pattern card, not on this strip.
    */
   private buildExtendedSection(): HTMLElement {
@@ -1474,6 +1591,7 @@ export class Panel {
         min: bounds.min,
         max: bounds.max,
         value: this.selectedInstrumentSettings()[knob.param],
+        taper: knob.taper,
         enabled: knob.supported(voice),
         valueText: (value) => knob.valueText(value, this.bandInstrument),
         onInput: (value) => {
@@ -1513,16 +1631,15 @@ export class Panel {
     tail.append(memories);
 
     // The button that puts the knobs of the selected memory position back
-    // to their default values.
+    // to their default values. It takes a long press: a brush past it must
+    // not throw the settings away.
     const reset = element('button', 'write-strip-reset');
     reset.type = 'button';
     reset.title =
-      'Put the knobs of the selected memory position back to the defaults';
+      'Hold to put the knobs of the selected memory position back to the defaults';
     reset.setAttribute('aria-label', reset.title);
     reset.textContent = 'RESET';
-    reset.addEventListener('click', () => {
-      this.resetKnobs();
-    });
+    this.armResetButton(reset);
     tail.append(reset);
     strip.append(tail);
 
@@ -1572,26 +1689,19 @@ export class Panel {
     stored: StoredBandMemory,
     fallback: BandMemoryPosition,
   ): BandMemoryPosition {
-    const filterKnob = this.paramKnobs.find(
-      (knob) => knob.param === 'filter',
-    );
     const instruments = fallback.instruments.map((settings, index) => {
       const kept = stored.instruments?.[index] ?? {};
-      const filterBounds =
-        filterKnob?.bounds(BAND_INSTRUMENTS[index] ?? 0) ?? {
-          min: 1000,
-          max: 15000,
-        };
+      const filterBounds = cutoffBounds(BAND_INSTRUMENTS[index] ?? 0);
       return {
         vol: clamp(kept.vol ?? settings.vol, 0, 2),
         pan: clamp(kept.pan ?? settings.pan, -1, 1),
-        tone: clamp(kept.tone ?? settings.tone, 0, 1),
+        tone: clamp(kept.tone ?? settings.tone, 0.5, 2),
         filter: clamp(
           kept.filter ?? settings.filter,
           filterBounds.min,
           filterBounds.max,
         ),
-        decay: clamp(kept.decay ?? settings.decay, 0.25, 4),
+        decay: clamp(kept.decay ?? settings.decay, 0.2, 5),
         send: clamp(kept.send ?? settings.send, 0, 1),
       };
     });
@@ -1616,17 +1726,24 @@ export class Panel {
   private applyBandMemory(memory: BandMemoryPosition): void {
     this.engine.setAccentGain(Math.round(memory.accent * Q16));
     // The settings of every instrument the selector can reach for. The
-    // engine takes a decay and a cut-off from three of the twelve only,
-    // and it ignores the rest.
+    // engine takes the decay of every one of the twelve and a cut-off
+    // from three of them only, and it ignores the rest.
     BAND_INSTRUMENTS.forEach((voice, index) => {
       const settings = memory.instruments[index];
       if (!settings) {
         return;
       }
       this.paramKnobs.forEach((knob) => {
-        if (knob.supported(voice)) {
-          knob.apply(settings[knob.param], voice);
+        if (!knob.supported(voice)) {
+          return;
         }
+        // The engine takes the value the knob stands at: a memory position
+        // that holds a value outside the range of this instrument is brought
+        // into the range before it reaches the engine, so the sound and the
+        // knob cannot disagree.
+        const bounds = knob.bounds(voice);
+        const value = clamp(settings[knob.param], bounds.min, bounds.max);
+        knob.apply(value, voice);
       });
     });
     // The knobs stand where the settings say.
@@ -1640,9 +1757,14 @@ export class Panel {
    * stand, and the engine keeps the settings it has until the source
    * changes.
    */
-  private applyBandPositions(memory: BandMemoryPosition): void {
+  private applyBandPositions(
+    memory: BandMemoryPosition,
+    moveSelector = true,
+  ): void {
     this.accentKnob?.set(memory.accent, false);
-    this.selectorKnob?.set(this.bandSelector, false);
+    if (moveSelector) {
+      this.selectorKnob?.set(this.bandSelector, false);
+    }
     const voice = this.bandInstrument;
     const settings = memory.instruments[this.bandSelector];
     this.paramKnobs.forEach((knob, index) => {
@@ -1671,7 +1793,10 @@ export class Panel {
       return;
     }
     this.bandSelector = next;
-    this.applyBandPositions(this.bandValues);
+    // The selector is the knob the user is turning or has just turned, so
+    // it is left where it stands: only the six knobs behind it move to the
+    // settings of the instrument it now picks.
+    this.applyBandPositions(this.bandValues, false);
     this.keepControlPositions();
   }
 
@@ -1772,6 +1897,60 @@ export class Panel {
    * only the value a position starts with, and it is lost when the
    * position is put back.
    */
+  /**
+   * Make the reset button take a long press.
+   *
+   * The reset throws the settings of the memory position away, so a click
+   * that was not meant must not do it: the reset runs only when the button
+   * has been held for RESET_HOLD_MS, with the pointer or the keyboard. The
+   * click the browser fires when the button is let go is swallowed.
+   */
+  private armResetButton(button: HTMLButtonElement): void {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const cancel = (): void => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      button.classList.remove('is-holding');
+    };
+    const begin = (): void => {
+      cancel();
+      button.classList.add('is-holding');
+      timer = setTimeout(() => {
+        timer = null;
+        button.classList.remove('is-holding');
+        this.resetKnobs();
+      }, RESET_HOLD_MS);
+    };
+
+    button.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      button.setPointerCapture(event.pointerId);
+      begin();
+    });
+    button.addEventListener('pointerup', cancel);
+    button.addEventListener('pointercancel', cancel);
+    button.addEventListener('keydown', (event) => {
+      if ((event.key !== 'Enter' && event.key !== ' ') || event.repeat) {
+        return;
+      }
+      begin();
+    });
+    button.addEventListener('keyup', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        cancel();
+      }
+    });
+    button.addEventListener('blur', cancel);
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+    });
+  }
+
   private resetKnobs(): boolean {
     const values = this.bandValues;
     values.accent = this.bandDefaults.accent;

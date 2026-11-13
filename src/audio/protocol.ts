@@ -149,7 +149,7 @@ export const BAND_INSTRUMENT_COUNT = BAND_INSTRUMENTS.length;
  *
  * The fifteen instruments fill the lower fifteen bits of a column, so the
  * sixteenth one marks the column as accented: every instrument in it is
- * played louder. It is the engine's own flag, `MP7_PATTERN_ACCENT`.
+ * played louder. It is the engine's own flag, `POPS_PATTERN_ACCENT`.
  */
 export const PATTERN_ACCENT_BIT = 1 << 15;
 
@@ -160,7 +160,7 @@ export const PATTERN_ACCENT_BIT = 1 << 15;
  * the steps it plays from it: the 4/4 signature plays every column, the
  * 3/4 signature skips the columns that lie outside its bar, and the 2/4
  * and the 6/8 share the compound grid, where a beat holds six columns
- * instead of eight. The numbers are the engine's own, `mp7_timesig`.
+ * instead of eight. The numbers are the engine's own, `pops_timesig`.
  */
 export const TIMESIG = {
   '4/4': 0,
@@ -297,6 +297,7 @@ export type EngineCommand =
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }
   | { type: 'instrPan'; instrument: number; value: number }
+  | { type: 'instrTune'; instrument: number; value: number }
   | { type: 'instrDecay'; instrument: number; value: number }
   | { type: 'instrCutoff'; instrument: number; value: number }
   | { type: 'instrFxSend'; instrument: number; value: number }

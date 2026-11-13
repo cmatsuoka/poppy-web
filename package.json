@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Browser recreation of a vintage preset rhythm unit, powered by libpoppy",
+  "description": "Browser recreation of a vintage preset rhythm unit, powered by libpops",
   "license": "MIT",
   "scripts": {
     "build:wasm": "bash scripts/build-wasm.sh",

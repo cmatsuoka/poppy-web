@@ -1,9 +1,9 @@
 # poppy-web
 
 A browser recreation of a 1970s Japanese preset rhythm unit. The sound
-engine is [libpoppy](https://github.com/cmatsuoka/libpoppy), a small
+engine is [libpops](https://github.com/cmatsuoka/libpoppy), a small
 integer-only C library compiled to WebAssembly. Audio is generated entirely
-by libpoppy, no samples are used.
+by libpops, no samples are used.
 
 ## Run it
 
@@ -12,7 +12,7 @@ wasm build.
 
 ```sh
 npm install
-npm run build:wasm   # fetch pinned libpoppy, compile wasm
+npm run build:wasm   # fetch pinned libpops, compile wasm
 npm run dev          # http://localhost:5173
 ```
 
@@ -23,7 +23,7 @@ npm run build
 npm run preview
 ```
 
-`vendor/libpoppy` is fetched into place by `scripts/build-wasm.sh` and is
+`vendor/libpops` is fetched into place by `scripts/build-wasm.sh` and is
 not committed. The pinned upstream commit is set in that script. The same
 script writes `build/version.ts` with the version of the library it just
 built, and the panel shows that version next to the engine's name.

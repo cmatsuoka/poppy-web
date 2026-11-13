@@ -3,7 +3,7 @@
  *
  * The card is a read-only display of the factory pattern the engine is
  * playing. The note data comes from the engine: the worklet reads it with
- * `mp7_get_factory_pattern()` and the main thread combines the selected
+ * `pops_get_selection_pattern()` and the main thread combines the selected
  * rhythms the same way the C engine does when it merges a selection - the
  * note masks are OR-ed, the enable masks are AND-ed and the grid of the
  * selection is the compound one as soon as one of the patterns plays on

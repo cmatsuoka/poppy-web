@@ -315,6 +315,13 @@ class PoppyProcessor extends AudioWorkletProcessor {
           command.value,
         );
         break;
+      case 'instrTune':
+        module._poppy_set_instr_tune(
+          this.context,
+          command.instrument,
+          command.value,
+        );
+        break;
       case 'instrDecay':
         module._poppy_set_instr_decay(
           this.context,
@@ -342,9 +349,26 @@ class PoppyProcessor extends AudioWorkletProcessor {
       case 'pattern':
         this.sendPattern(command.bank, command.buttons);
         break;
-      case 'source':
+      case 'source': {
+        // The source switch cancels a change that waits for the end of the
+        // cycle, but the panel keeps the button of that change pressed: the
+        // selection is read against the patterns of the new source, and it
+        // is queued again right after the switch so it waits there too.
+        this.readPanel();
+        const pending = this.panel.pending;
+        const pendingBank = this.panel.pendingBank;
+        const pendingButtons = this.panel.pendingButtons;
+
         module._poppy_set_pattern_source(this.context, command.source);
+        if (pending) {
+          module._poppy_select_rhythm(
+            this.context,
+            pendingBank,
+            pendingButtons | 0x8000,
+          );
+        }
         break;
+      }
       case 'userPattern': {
         // The notes are written into a scratch buffer, so the engine can
         // copy them into the slot itself.

@@ -257,12 +257,18 @@ body {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 50%);
 }
 
-/* A small knob of the write strip: a detented rotary switch. */
+/* A small knob of the write strip: a detented rotary switch.
+   Every knob takes the same width, the widest readout there is, so the
+   spacing between the knobs stays put as the readouts change. */
 .mini-knob {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: clamp(48px, 4.9vw, 68px);
   gap: clamp(1px, 0.25vw, 4px);
+  /* The row of knobs sits a touch low in the strip, aligned with the print
+     and not with the middle of the metal band. */
+  transform: translateY(clamp(1px, 0.15vw, 2px));
 }
 
 /* A knob the engine takes nothing from for the instrument the selector
@@ -347,7 +353,7 @@ body {
 
 /* The knob reads out what it points at. */
 .mini-readout {
-  max-width: clamp(52px, 5.4vw, 76px);
+  max-width: clamp(48px, 4.9vw, 68px);
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: clamp(6.5px, 0.68vw, 10px);
@@ -468,8 +474,10 @@ body {
     color 90ms linear;
 }
 
-/* The button goes down while the finger is on it. */
-.write-strip-reset:active {
+/* The button goes down while the finger is on it, and it stays down for
+   the whole hold that the reset takes. */
+.write-strip-reset:active,
+.write-strip-reset.is-holding {
   transform: translateY(1px);
   background: linear-gradient(#242429, #161619);
   box-shadow: inset 0 2px 4px rgb(0 0 0 / 45%);
@@ -1291,8 +1299,9 @@ body {
   /* The marks stand at the two ends of the lever's travel. */
   align-self: stretch;
   justify-content: space-between;
-  /* They sit just inside the ends of the switch. */
-  margin: 8px 0;
+  /* They stand near the ends of the switch, a little inside them, so the
+     two labels are almost as far apart as the travel of the lever. */
+  margin: 3px 0;
   font-family: var(--print-name);
   font-size: var(--name-size);
   font-weight: 600;

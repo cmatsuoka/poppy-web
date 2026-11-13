@@ -33,8 +33,19 @@ const STORAGE_KEY = 'poppy-web.controls.v2';
  * Version 4 is the band with the selector: a position carries the accent
  * gain and the settings of every instrument the selector can pick, where
  * the band before carried one value per knob.
+ *
+ * Version 5 turned the tone that stood dimmed in the band into a
+ * multiplier of what the engine pitches in the voice.
+ *
+ * Version 6 named the multiplier "tone": the engine's pitch multiplier
+ * does not reach the pitch alone, and a voice whose tone carries a
+ * band-pass moves the center of it as well.
+ *
+ * Version 7 is the decay that reaches every instrument and takes a
+ * multiplier between a fifth and five times the factory decay: a decay
+ * the positions of an older machine hold means something else.
  */
-export const MEMORIES_VERSION = 4;
+export const MEMORIES_VERSION = 7;
 
 /** How long the controls have to stand still before they are written. */
 const WRITE_DELAY = 500;
@@ -43,9 +54,8 @@ const WRITE_DELAY = 500;
  * The settings of one instrument of the band, as the browser keeps them.
  *
  * The keys are the parameters the six knobs of the band carry: the level,
- * the place in the stereo field, the cut-off, the decay and the reverb
- * send. The tone is not among them: it has nothing in the engine to reach
- * for yet.
+ * the place in the stereo field, the tone, the cut-off, the decay and
+ * the reverb send.
  */
 export interface StoredInstrumentSettings {
   vol?: number;

@@ -37,6 +37,8 @@ interface Settings {
   accentGain: number;
   /** The place of every instrument in the stereo field, Q16. */
   instrPan: number[];
+  /** The tuning of an instrument, as a multiplier of its factory pitch, Q16. */
+  instrTune: number[];
   /** The decay of an instrument, as a multiplier of its factory decay, Q16. */
   instrDecay: number[];
   /** The center of the band-pass of an instrument, in Hz. */
@@ -84,6 +86,8 @@ function defaultSettings(): Settings {
     accentGain: Math.round((6 * Q16) / 5),
     // Every instrument stands in the center of the stereo field.
     instrPan: Array.from({ length: 15 }, () => Q16 / 2),
+    // The factory pitch of every instrument.
+    instrTune: Array.from({ length: 15 }, () => Q16),
     // The factory decay of every instrument.
     instrDecay: Array.from({ length: 15 }, () => Q16),
     instrCutoff,
@@ -253,6 +257,22 @@ export class PoppyEngine {
     }
     this.settings.instrPan[instrument] = value;
     this.post({ type: 'instrPan', instrument, value });
+    this.wake();
+  }
+
+  /**
+   * The tuning of an instrument, as a multiplier of its factory pitch, Q16.
+   *
+   * 65536 is the factory pitch, 32768 is an octave down and 131072 an
+   * octave up. The engine takes the tuning of every instrument, and a note
+   * that is sounding retunes from the next sample.
+   */
+  setInstrumentTune(instrument: number, value: number): void {
+    if (instrument < 0 || instrument >= this.settings.instrTune.length) {
+      return;
+    }
+    this.settings.instrTune[instrument] = value;
+    this.post({ type: 'instrTune', instrument, value });
     this.wake();
   }
 
@@ -558,6 +578,9 @@ export class PoppyEngine {
     this.post({ type: 'accentGain', value: this.settings.accentGain });
     this.settings.instrPan.forEach((value, instrument) => {
       this.post({ type: 'instrPan', instrument, value });
+    });
+    this.settings.instrTune.forEach((value, instrument) => {
+      this.post({ type: 'instrTune', instrument, value });
     });
     this.settings.instrDecay.forEach((value, instrument) => {
       this.post({ type: 'instrDecay', instrument, value });

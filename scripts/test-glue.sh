@@ -9,11 +9,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIBPOPPY_DIR="${LIBPOPPY_DIR:-$ROOT/vendor/libpoppy}"
+LIBPOPS_DIR="${LIBPOPS_DIR:-$ROOT/vendor/libpops}"
 CC="${CC:-cc}"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 
-if [ ! -d "$LIBPOPPY_DIR/src" ]; then
+if [ ! -d "$LIBPOPS_DIR/src" ]; then
     cat >&2 <<'EOF'
 error: the library the build uses is missing.
 
@@ -32,12 +32,12 @@ mkdir -p "$BUILD_DIR"
 # The glue hands its pointers out as int32, which is what wasm wants. A
 # 64-bit host build needs the addresses to fit into an int32, so the binary
 # is linked non-PIE.
-"$CC" -std=c99 -O2 -no-pie -DLIBPOPPY_EXTRA \
+"$CC" -std=c99 -O2 -no-pie -DLIBPOPS_EXTRA \
     -I"$ROOT/wasm/stub" \
-    -I"$LIBPOPPY_DIR/include" \
-    -I"$LIBPOPPY_DIR/src" \
+    -I"$LIBPOPS_DIR/include" \
+    -I"$LIBPOPS_DIR/src" \
     -I"$ROOT/wasm" \
-    "$LIBPOPPY_DIR"/src/*.c \
+    "$LIBPOPS_DIR"/src/*.c \
     "$ROOT/wasm/test_glue.c" \
     -o "$BUILD_DIR/test_glue"
 
