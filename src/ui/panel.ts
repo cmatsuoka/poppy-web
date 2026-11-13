@@ -2223,8 +2223,6 @@ export class Panel {
     this.legendRows.push(bankA, bankB);
 
     const keys = element('div', 'rhythm-keys');
-    keys.title =
-      'Click a rhythm to select it on its own, click a lit rhythm to keep the selection, hold it down to add it to the selection, press two keys at the same time to latch them together. On the keyboard: 1 to 0 press the ten rhythm keys, A and B pick the bank, Space starts and stops.';
     for (let index = 0; index < 10; index += 1) {
       const button = element('button', 'rhythm-key');
       button.type = 'button';
@@ -2656,14 +2654,15 @@ export class Panel {
 
   /**
    * A short press picks a single rhythm: the key that was pressed becomes
-   * the only latched one. A key that is already latched is left alone,
-   * and so is every other key: a click on a lit key must not switch the
-   * machine off.
+   * the only latched one. Among keys that are already latched the click
+   * keeps the one that was pressed and releases the others. A key that is
+   * latched on its own stays alone, and so does every other key: a click
+   * on a lit key must not switch the machine off.
    */
   private applyShortPress(index: number): void {
     const buttons = this.displayedButtons();
     const bit = 1 << index;
-    if ((buttons & bit) !== 0) {
+    if (buttons === bit) {
       return;
     }
     this.requestSelection(this.displayedBank(), bit);

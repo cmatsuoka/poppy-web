@@ -1321,7 +1321,7 @@ body {
   padding-top: var(--names-drop);
   /* The keys hang below the bed by their own height; the padding keeps
      the tips of the keys off the bottom of the plate. */
-  padding-bottom: clamp(16px, 2.2vw, 32px);
+  padding-bottom: clamp(16px, 2.8vw, 38px);
 }
 
 .rhythm-legend {
