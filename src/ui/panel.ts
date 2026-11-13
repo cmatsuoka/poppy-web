@@ -1068,9 +1068,11 @@ export class Panel {
    * out from under the black cover, and the knobs of the band are there
    * to be turned.
    *
-   * The band stays open: the machine comes up the way the user left
-   * it.
-   */
+    * The band stays open: the machine comes up the way the user left
+    * it. The mode lever closes it again: the next trip through the
+    * advanced mode and back leaves the band under the cover, and the
+    * sequence has to be typed again to open it.
+    */
   private bandUnlocked = false;
 
   /** The hidden sequence that opens the band of knobs. */
@@ -1093,7 +1095,8 @@ export class Panel {
     this.savedControls = loadControlPositions();
     // A hidden sequence opens the band of knobs in the classic
     // mode, and the band stays open: the machine comes up the way the user
-    // left it.
+    // left it. The mode lever closes it again on the way back from the
+    // advanced mode.
     this.bandUnlocked = this.savedControls.bandUnlocked === true;
 
     this.root = element('div', 'stage');
@@ -1848,12 +1851,15 @@ export class Panel {
     // not saved goes back to the contents the browser holds.
     if (source === PATTERN_SOURCE_PRESET) {
       void this.discardUnsavedPatterns();
-      // The factory rhythms are played with the settings the machine comes
-      // up with, unless the hidden sequence has opened the band of
-      // knobs: then the band is in charge, as it is in the advanced mode.
-      this.applyBandValues(
-        this.bandUnlocked ? this.bandValues : this.bandDefaults,
-      );
+      // Returning from the advanced mode closes the band of knobs again
+      // when the hidden sequence had opened it in the classic mode: the
+      // sequence has to be typed again to open it. The factory rhythms
+      // are played with the settings the machine comes up with.
+      if (this.bandUnlocked) {
+        this.bandUnlocked = false;
+        this.keepControlPositions();
+      }
+      this.applyBandValues(this.bandDefaults);
     } else {
       // The user patterns are played with the settings of the memory
       // position that is selected.
