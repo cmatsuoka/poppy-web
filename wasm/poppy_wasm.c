@@ -160,28 +160,38 @@ WASM_EXPORT void poppy_set_instr_pan(void *ctx, int32_t instrument, int32_t pan)
     mp7_set_instr_pan(ctx, (mp7_instr)instrument, pan);
 }
 
-/* The decay of the snare 1, as a multiplier of the factory decay, Q16.
+/* The decay of an instrument, as a multiplier of its factory decay, Q16.
  *
  * 65536 is the factory decay and the engine clamps the multiplier to a
- * quarter and to four times the factory decay. */
-WASM_EXPORT void poppy_set_snare1_decay(void *ctx, int32_t decay_q16)
+ * quarter and to four times the factory decay. The engine takes the
+ * multiplier for the snare 1, the snare 2 and the hi-hat, and ignores it
+ * for every other instrument. */
+WASM_EXPORT void poppy_set_instr_decay(void *ctx, int32_t instrument,
+                                       int32_t decay_q16)
 {
-    mp7_set_instr_decay(ctx, MP7_INSTR_SNARE_1, decay_q16);
+    mp7_set_instr_decay(ctx, (mp7_instr)instrument, decay_q16);
 }
 
-/* The center of the band-pass of the snare 1, in Hz. The engine clamps it
- * to the range of the parameter and to two fifths of the sample rate. */
-WASM_EXPORT void poppy_set_snare1_cutoff(void *ctx, int32_t cutoff_hz)
+/* The center of the band-pass of an instrument, in Hz. The engine clamps
+ * it to the range of the parameter and to two fifths of the sample rate.
+ * The engine takes the cut-off for the snare 1, the snare 2 and the
+ * hi-hat, and ignores it for every other instrument. The high-pass of the
+ * hi-hat stays at the factory corner. */
+WASM_EXPORT void poppy_set_instr_cutoff(void *ctx, int32_t instrument,
+                                        int32_t cutoff_hz)
 {
-    mp7_set_instr_cutoff(ctx, MP7_INSTR_SNARE_1, (uint32_t)cutoff_hz);
+    mp7_set_instr_cutoff(ctx, (mp7_instr)instrument, (uint32_t)cutoff_hz);
 }
 
-/* The center of the band-pass of the hi-hat, in Hz. The engine clamps it
- * to the range of the parameter and to two fifths of the sample rate. The
- * high-pass of the hi-hat stays at the factory corner. */
-WASM_EXPORT void poppy_set_hihat_cutoff(void *ctx, int32_t cutoff_hz)
+/* The reverb send level of an instrument, Q16.
+ *
+ * 0 sends nothing and 65536 sends the instrument's post-gain, post-pan
+ * signal to the bus at full level. The bus renders only in a build with
+ * LIBPOPPY_FX_REVERB; without it the sends are stored but never heard. */
+WASM_EXPORT void poppy_set_instr_fx_send(void *ctx, int32_t instrument,
+                                         int32_t send_q16)
 {
-    mp7_set_instr_cutoff(ctx, MP7_INSTR_HIHAT, (uint32_t)cutoff_hz);
+    mp7_set_instr_fx_send(ctx, (mp7_instr)instrument, send_q16);
 }
 
 /* The gain an accented column is played at, Q16. */

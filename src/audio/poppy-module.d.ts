@@ -21,9 +21,9 @@ declare module '*poppy.mjs' {
     _poppy_set_balance(ctx: number, q16: number): void;
     _poppy_set_instr_gain(ctx: number, instrument: number, q16: number): void;
     _poppy_set_instr_pan(ctx: number, instrument: number, pan: number): void;
-    _poppy_set_snare1_decay(ctx: number, decayQ16: number): void;
-    _poppy_set_snare1_cutoff(ctx: number, cutoffHz: number): void;
-    _poppy_set_hihat_cutoff(ctx: number, cutoffHz: number): void;
+    _poppy_set_instr_decay(ctx: number, instrument: number, decayQ16: number): void;
+    _poppy_set_instr_cutoff(ctx: number, instrument: number, cutoffHz: number): void;
+    _poppy_set_instr_fx_send(ctx: number, instrument: number, sendQ16: number): void;
     _poppy_set_accent_gain(ctx: number, q16: number): void;
     _poppy_panel_state(ctx: number): number;
     _poppy_selection_pattern(ctx: number, bank: number, buttons: number): number;

@@ -265,6 +265,18 @@ body {
   gap: clamp(1px, 0.25vw, 4px);
 }
 
+/* A knob the engine takes nothing from for the instrument the selector
+ * stands at: it stands dimmed, and it takes no input. */
+.mini-knob--dead .mini-dial {
+  cursor: default;
+  filter: saturate(0.3) brightness(0.7);
+}
+
+.mini-knob--dead .mini-caption,
+.mini-knob--dead .mini-readout {
+  color: rgb(35 35 42 / 38%);
+}
+
 .mini-dial {
   position: relative;
   width: clamp(26px, 2.7vw, 36px);

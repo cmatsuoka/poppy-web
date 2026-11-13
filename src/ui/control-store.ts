@@ -9,8 +9,10 @@
  *
  * The knobs of the band live in four memory positions: the position that
  * is selected is the one the knobs stand at, and it is the one the reset
- * button puts back. The positions and the selected one are kept in the
- * browser as well.
+ * button puts back. Every position keeps the accent gain and the settings
+ * of every instrument the selector of the band can pick. The positions,
+ * the selected one and the instrument the selector stands at are kept in
+ * the browser as well.
  *
  * A control that is turned gives a lot of changes in a short time, and
  * every one of them would be a write to the browser. The write waits
@@ -27,11 +29,43 @@ const STORAGE_KEY = 'poppy-web.controls.v2';
  * ranges of the knobs and the values the positions are given changed
  * with it, and the positions of an older machine mean something else.
  * The tempo and the faders do not depend on it, and they are kept.
+ *
+ * Version 4 is the band with the selector: a position carries the accent
+ * gain and the settings of every instrument the selector can pick, where
+ * the band before carried one value per knob.
  */
-export const MEMORIES_VERSION = 3;
+export const MEMORIES_VERSION = 4;
 
 /** How long the controls have to stand still before they are written. */
 const WRITE_DELAY = 500;
+
+/**
+ * The settings of one instrument of the band, as the browser keeps them.
+ *
+ * The keys are the parameters the six knobs of the band carry: the level,
+ * the place in the stereo field, the cut-off, the decay and the reverb
+ * send. The tone is not among them: it has nothing in the engine to reach
+ * for yet.
+ */
+export interface StoredInstrumentSettings {
+  vol?: number;
+  pan?: number;
+  tone?: number;
+  filter?: number;
+  decay?: number;
+  send?: number;
+}
+
+/**
+ * One memory position of the band of knobs, as the browser keeps it.
+ *
+ * The accent gain and the settings of the twelve instruments the selector
+ * can pick, in the order of the selector.
+ */
+export interface StoredBandMemory {
+  accent?: number;
+  instruments?: StoredInstrumentSettings[];
+}
 
 export interface ControlPositions {
   /** The tempo, in beats per minute. */
@@ -52,19 +86,15 @@ export interface ControlPositions {
    * panel writes today.
    */
   memoriesVersion?: number;
-  /**
-   * The memory positions of the band of knobs.
-   *
-   * Every position keeps the settings of the knobs by the name of the
-   * knob, so a knob that changes its function does not come up with the
-   * position of the knob that stood there before. A position that was not
-   * there at the last visit comes up with the values it is given: the
-   * seeded values of the first position, and the default values of the
-   * others.
-   */
-  memories?: Record<string, number>[];
+  /** The memory positions of the band of knobs. */
+  memories?: StoredBandMemory[];
   /** The memory position of the band that is selected. */
   memory?: number;
+  /**
+   * The instrument the selector of the band stands at, as the engine
+   * voice it picks.
+   */
+  instrument?: number;
 }
 
 function isNumbers(value: unknown): value is number[] {
@@ -74,7 +104,7 @@ function isNumbers(value: unknown): value is number[] {
   );
 }
 
-function isNumberRecord(value: unknown): value is Record<string, number> {
+function isStoredInstrument(value: unknown): value is StoredInstrumentSettings {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
   }
@@ -83,10 +113,24 @@ function isNumberRecord(value: unknown): value is Record<string, number> {
   );
 }
 
-function isNumberRecordArray(
-  value: unknown,
-): value is Record<string, number>[] {
-  return Array.isArray(value) && value.every((entry) => isNumberRecord(entry));
+function isStoredBandMemory(value: unknown): value is StoredBandMemory {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    record.accent !== undefined &&
+    (typeof record.accent !== 'number' || !Number.isFinite(record.accent))
+  ) {
+    return false;
+  }
+  if (record.instruments !== undefined) {
+    if (!Array.isArray(record.instruments)) {
+      return false;
+    }
+    return record.instruments.every((entry) => isStoredInstrument(entry));
+  }
+  return true;
 }
 
 /**
@@ -132,7 +176,8 @@ export function loadControlPositions(): ControlPositions {
   // something else, and the ranges of the knobs have changed with them.
   if (
     record.memoriesVersion === MEMORIES_VERSION &&
-    isNumberRecordArray(record.memories)
+    Array.isArray(record.memories) &&
+    record.memories.every((entry) => isStoredBandMemory(entry))
   ) {
     positions.memoriesVersion = MEMORIES_VERSION;
     positions.memories = record.memories;
@@ -143,6 +188,13 @@ export function loadControlPositions(): ControlPositions {
     record.memory >= 0
   ) {
     positions.memory = record.memory;
+  }
+  if (
+    typeof record.instrument === 'number' &&
+    Number.isInteger(record.instrument) &&
+    record.instrument >= 0
+  ) {
+    positions.instrument = record.instrument;
   }
   return positions;
 }

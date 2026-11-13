@@ -385,13 +385,13 @@ int main(void)
     check(peak(muted, 20480) == 0, "a voice at level zero is silent");
 
     prepare_pattern(ctx, 9, snare_notes);
-    poppy_set_snare1_cutoff(ctx, 1000);
+    poppy_set_instr_cutoff(ctx, MP7_INSTR_SNARE_1, 1000);
     render(ctx, dark, 20480);
     check(memcmp(dark, snare, sizeof(snare)) != 0,
           "a lower cutoff changes the voice");
 
     prepare_pattern(ctx, 9, snare_notes);
-    poppy_set_snare1_decay(ctx, 65536 / 4);
+    poppy_set_instr_decay(ctx, MP7_INSTR_SNARE_1, 65536 / 4);
     render(ctx, dark, 20480);
     check(memcmp(dark, snare, sizeof(snare)) != 0,
           "a shorter decay changes the voice");
@@ -410,15 +410,34 @@ int main(void)
     check(peak(hihat, 20480) > 0, "the hi-hat is heard");
 
     prepare_pattern(ctx, 9, hihat_notes);
-    poppy_set_hihat_cutoff(ctx, 15000);
+    poppy_set_instr_cutoff(ctx, MP7_INSTR_HIHAT, 15000);
     render(ctx, bright, 20480);
     check(memcmp(bright, hihat, sizeof(hihat)) != 0,
           "a higher cutoff of the hi-hat changes the voice");
 
+    /* The reverb send of a voice. In a build with the reverb bus a send
+     * makes the voice ring on, and a voice that sends nothing is left
+     * alone. The sends are stored either way. */
+    static int16_t dry[20480];
+    static int16_t wet[20480];
+
+    prepare_pattern(ctx, 9, snare_notes);
+    render(ctx, dry, 20480);
+    prepare_pattern(ctx, 9, snare_notes);
+    poppy_set_instr_fx_send(ctx, MP7_INSTR_SNARE_1, 65536);
+    render(ctx, wet, 20480);
+#ifdef LIBPOPPY_FX_REVERB
+    check(peak(wet, 20480) > peak(dry, 20480),
+          "a voice that sends to the reverb rings on");
+#endif
+    poppy_set_instr_fx_send(ctx, MP7_INSTR_SNARE_1, 0);
+
     /* A value outside the range of a parameter is clamped by the engine,
      * and an instrument that does not exist is ignored. */
-    poppy_set_snare1_cutoff(ctx, 0);
-    poppy_set_hihat_cutoff(ctx, 0);
+    poppy_set_instr_cutoff(ctx, MP7_INSTR_SNARE_1, 0);
+    poppy_set_instr_cutoff(ctx, MP7_INSTR_HIHAT, 0);
+    poppy_set_instr_decay(ctx, MP7_INSTR_BASS, 0);
+    poppy_set_instr_fx_send(ctx, MP7_INSTR_BASS, 0);
     poppy_set_instr_gain(ctx, 99, 0);
     poppy_set_instr_pan(ctx, 99, 0);
 
@@ -433,7 +452,7 @@ int main(void)
     render(ctx, factory_cutoff, 20480);
 
     prepare_pattern(ctx, 9, snare_notes);
-    poppy_set_snare1_cutoff(ctx, 1000);
+    poppy_set_instr_cutoff(ctx, MP7_INSTR_SNARE_1, 1000);
     mp7_set_sample_rate(ctx, 22050);
     render(ctx, moved_cutoff, 20480);
 

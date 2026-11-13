@@ -13,8 +13,8 @@ export const INSTRUMENT_NAMES = [
   'Bass',
   'Snare 1',
   'Snare 2',
-  'Small Bongo',
-  'Large Bongo',
+  'Sm Bongo',
+  'Lg Bongo',
   'Conga',
   'Cowbell',
   'Claves',
@@ -122,18 +122,27 @@ export const INSTR_GUIRO = 13;
 export const INSTR_QUIJADA = 14;
 
 /**
- * The percussion voices the PERC VOL knob of the band reaches for: the
- * small bongo, the large bongo, the conga, the cowbell, the claves and the
- * rimshot.
+ * The instruments the selector of the band of knobs picks from, in the
+ * engine's voice order: the bass is the first voice and the cymbal 2 the
+ * twelfth. The tambourine, the guiro and the quijada are not among them:
+ * they are the three blue Additional Volume faders on the faceplate.
  */
-export const INSTR_PERCUSSION = [
+export const BAND_INSTRUMENTS = [
+  INSTR_BASS,
+  INSTR_SNARE_1,
+  INSTR_SNARE_2,
   INSTR_SMALL_BONGO,
   INSTR_LARGE_BONGO,
   INSTR_CONGA,
   INSTR_COWBELL,
   INSTR_CLAVES,
+  INSTR_HIHAT,
   INSTR_RIMSHOT,
+  INSTR_CYMBAL_1,
+  INSTR_CYMBAL_2,
 ] as const;
+
+export const BAND_INSTRUMENT_COUNT = BAND_INSTRUMENTS.length;
 
 /**
  * The accent flag of a pattern column.
@@ -288,11 +297,10 @@ export type EngineCommand =
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }
   | { type: 'instrPan'; instrument: number; value: number }
-  | { type: 'snare1Decay'; value: number }
-  | { type: 'snare1Cutoff'; value: number }
-  | { type: 'hihatCutoff'; value: number }
+  | { type: 'instrDecay'; instrument: number; value: number }
+  | { type: 'instrCutoff'; instrument: number; value: number }
+  | { type: 'instrFxSend'; instrument: number; value: number }
   | { type: 'accentGain'; value: number }
-  | { type: 'spread'; value: number }
   | { type: 'pattern'; bank: Bank; buttons: number }
   | { type: 'source'; source: PatternSource }
   | { type: 'userPattern'; index: number; pattern: UserPattern }

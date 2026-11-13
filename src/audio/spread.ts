@@ -13,15 +13,19 @@ import {
   INSTR_TAMBORINE,
 } from './protocol';
 
-const Q16 = 65536;
-
 /**
- * How far every instrument is spread over the stereo field.
+ * The place of every instrument in the stereo field, the way the machine
+ * prints it.
  *
  * The number is the part of the way from the center of the field to its
  * edge: 0.30 is thirty percent of the way to the right and -0.60 sixty
  * percent of the way to the left. The bass drum, the snare 1 and the
  * claves are not in the table: they stay in the center of the field.
+ *
+ * The PAN knob of the band moves one instrument away from the center of
+ * the field itself. This table is no longer a control of its own: it is
+ * the print the machine comes up with, and the settings the first memory
+ * position is seeded with are half of the way the table says.
  */
 export const STEREO_SPREAD: Readonly<Record<number, number>> = {
   [INSTR_SNARE_2]: 0.3,
@@ -39,24 +43,13 @@ export const STEREO_SPREAD: Readonly<Record<number, number>> = {
 };
 
 /**
- * The instruments the spread knob reaches for.
+ * The place an instrument is seeded with, in the units of the PAN knob.
  *
- * The bass drum, the snare 1 and the claves are not among them: they
- * stay in the center of the field.
+ * The PAN knob stands between -1 and 1, with the center of the field in
+ * the middle. The first memory position comes up with the instrument at
+ * half of the way to its side in the table, the way the machine's print
+ * would sound spread softly.
  */
-export const SPREAD_INSTRUMENTS = Object.keys(STEREO_SPREAD).map(Number);
-
-/**
- * The place of an instrument in the stereo field, Q16.
- *
- * The knob stands between -1 and 1. At zero every instrument is in the
- * center of the field, at one every instrument stands as far to its side
- * as the table says it goes, and below zero the whole field is mirrored.
- * The engine's pan law is linear: the number is the part of the signal
- * that goes into the right channel.
- */
-export function spreadPanQ16(spread: number, instrument: number): number {
-  const offset = STEREO_SPREAD[instrument] ?? 0;
-  const pan = Q16 / 2 + spread * offset * (Q16 / 2);
-  return Math.round(Math.min(Q16, Math.max(0, pan)));
+export function seedPan(instrument: number): number {
+  return (STEREO_SPREAD[instrument] ?? 0) / 2;
 }

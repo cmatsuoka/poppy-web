@@ -120,12 +120,13 @@ cat > "$OUT_DIR/version.ts" <<EOF
 export const LIBPOPPY_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
 EOF
 
-EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_snare1_decay","_poppy_set_snare1_cutoff","_poppy_set_hihat_cutoff","_poppy_set_accent_gain","_poppy_panel_state","_poppy_selection_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
+EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_instr_decay","_poppy_set_instr_cutoff","_poppy_set_instr_fx_send","_poppy_set_accent_gain","_poppy_panel_state","_poppy_selection_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
 
 # The extended build of the engine: it carries the 20 user pattern slots and
-# the switch that points the sequencer at them. The panel's extended mode
-# needs them, so the macro is always on here.
-LIBPOPPY_DEFS='-DLIBPOPPY_EXTRA'
+# the switch that points the sequencer at them, and the reverb bus that the
+# SEND knob of the band sends to. The panel needs them all, so the macros
+# are always on here.
+LIBPOPPY_DEFS='-DLIBPOPPY_EXTRA -DLIBPOPPY_FX_REVERB'
 
 # shellcheck disable=SC2086
 "$EMCC" \

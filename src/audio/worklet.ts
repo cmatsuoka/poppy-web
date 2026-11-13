@@ -16,7 +16,6 @@ import {
   type PanelState,
   type PatternView,
 } from './protocol';
-import { SPREAD_INSTRUMENTS, spreadPanQ16 } from './spread';
 
 const BLOCK_FRAMES = 128;
 const PANEL_INTERVAL = Math.max(1, Math.round(sampleRate / 20));
@@ -316,31 +315,30 @@ class PoppyProcessor extends AudioWorkletProcessor {
           command.value,
         );
         break;
-      case 'snare1Decay':
-        module._poppy_set_snare1_decay(this.context, command.value);
+      case 'instrDecay':
+        module._poppy_set_instr_decay(
+          this.context,
+          command.instrument,
+          command.value,
+        );
         break;
-      case 'snare1Cutoff':
-        module._poppy_set_snare1_cutoff(this.context, command.value);
+      case 'instrCutoff':
+        module._poppy_set_instr_cutoff(
+          this.context,
+          command.instrument,
+          command.value,
+        );
         break;
-      case 'hihatCutoff':
-        module._poppy_set_hihat_cutoff(this.context, command.value);
+      case 'instrFxSend':
+        module._poppy_set_instr_fx_send(
+          this.context,
+          command.instrument,
+          command.value,
+        );
         break;
       case 'accentGain':
         module._poppy_set_accent_gain(this.context, command.value);
         break;
-      case 'spread': {
-        // Every instrument that is spread moves to its own place in the
-        // stereo field. The instruments that stay in the center are not
-        // touched at all.
-        for (const instrument of SPREAD_INSTRUMENTS) {
-          module._poppy_set_instr_pan(
-            this.context,
-            instrument,
-            spreadPanQ16(command.value, instrument),
-          );
-        }
-        break;
-      }
       case 'pattern':
         this.sendPattern(command.bank, command.buttons);
         break;

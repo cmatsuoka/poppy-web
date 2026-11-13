@@ -35,16 +35,14 @@ interface Settings {
   instrGain: number[];
   /** The gain an accented column is played at, Q16. */
   accentGain: number;
-  /** The spread of the instruments over the stereo field, -1 to 1. */
-  spread: number;
   /** The place of every instrument in the stereo field, Q16. */
   instrPan: number[];
-  /** The decay of the snare 1, as a multiplier of the factory decay, Q16. */
-  snare1Decay: number;
-  /** The center of the band-pass of the snare 1, in Hz. */
-  snare1Cutoff: number;
-  /** The center of the band-pass of the hi-hat, in Hz. */
-  hihatCutoff: number;
+  /** The decay of an instrument, as a multiplier of its factory decay, Q16. */
+  instrDecay: number[];
+  /** The center of the band-pass of an instrument, in Hz. */
+  instrCutoff: number[];
+  /** The reverb send of an instrument, Q16. */
+  instrFxSend: number[];
 }
 
 /**
@@ -68,6 +66,12 @@ function defaultSettings(): Settings {
   instrGain[12] = Q16 / 2;
   instrGain[13] = Q16 / 2;
   instrGain[14] = Q16 / 2;
+  // The cut-offs the engine comes up with: 5.5 kHz for both snares and
+  // 10 kHz for the hi-hat. The voices without a cut-off carry a zero.
+  const instrCutoff = Array.from({ length: 15 }, () => 0);
+  instrCutoff[1] = 5500;
+  instrCutoff[2] = 5500;
+  instrCutoff[8] = 10000;
   return {
     tempo: 120,
     // Mid-position on the volume fader maps to panel value 2.0, which the
@@ -78,15 +82,13 @@ function defaultSettings(): Settings {
     // The engine's own accent gain: 1.2 times the level of a column that
     // is not accented.
     accentGain: Math.round((6 * Q16) / 5),
-    // The instruments stand in the center of the stereo field, the way
-    // the engine comes up.
-    spread: 0,
     // Every instrument stands in the center of the stereo field.
     instrPan: Array.from({ length: 15 }, () => Q16 / 2),
-    // The factory decay of the snare 1 and the factory cut-offs.
-    snare1Decay: Q16,
-    snare1Cutoff: 5500,
-    hihatCutoff: 10000,
+    // The factory decay of every instrument.
+    instrDecay: Array.from({ length: 15 }, () => Q16),
+    instrCutoff,
+    // No instrument sends to the reverb when the machine comes up.
+    instrFxSend: Array.from({ length: 15 }, () => 0),
   };
 }
 
@@ -255,28 +257,38 @@ export class PoppyEngine {
   }
 
   /**
-   * The decay of the snare 1, as a multiplier of the factory decay, Q16.
+   * The decay of an instrument, as a multiplier of its factory decay, Q16.
    *
-   * 65536 is the factory decay: the snare rings as long as it does on the
-   * machine.
+   * 65536 is the factory decay: the voice rings as long as it does on the
+   * machine. The engine takes the multiplier for the snare 1, the snare 2
+   * and the hi-hat, and ignores it for every other instrument.
    */
-  setSnare1Decay(value: number): void {
-    this.settings.snare1Decay = value;
-    this.post({ type: 'snare1Decay', value });
+  setInstrumentDecay(instrument: number, value: number): void {
+    if (instrument < 0 || instrument >= this.settings.instrDecay.length) {
+      return;
+    }
+    this.settings.instrDecay[instrument] = value;
+    this.post({ type: 'instrDecay', instrument, value });
     this.wake();
   }
 
-  /** The center of the band-pass of the snare 1, in Hz. */
-  setSnare1Cutoff(value: number): void {
-    this.settings.snare1Cutoff = value;
-    this.post({ type: 'snare1Cutoff', value });
+  /** The center of the band-pass of an instrument, in Hz. */
+  setInstrumentCutoff(instrument: number, value: number): void {
+    if (instrument < 0 || instrument >= this.settings.instrCutoff.length) {
+      return;
+    }
+    this.settings.instrCutoff[instrument] = value;
+    this.post({ type: 'instrCutoff', instrument, value });
     this.wake();
   }
 
-  /** The center of the band-pass of the hi-hat, in Hz. */
-  setHihatCutoff(value: number): void {
-    this.settings.hihatCutoff = value;
-    this.post({ type: 'hihatCutoff', value });
+  /** The reverb send of an instrument, Q16. */
+  setInstrumentFxSend(instrument: number, value: number): void {
+    if (instrument < 0 || instrument >= this.settings.instrFxSend.length) {
+      return;
+    }
+    this.settings.instrFxSend[instrument] = value;
+    this.post({ type: 'instrFxSend', instrument, value });
     this.wake();
   }
 
@@ -287,21 +299,6 @@ export class PoppyEngine {
   setAccentGain(value: number): void {
     this.settings.accentGain = value;
     this.post({ type: 'accentGain', value });
-    this.wake();
-  }
-
-  /**
-   * Spread the instruments over the stereo field.
-   *
-   * The knob stands between -1 and 1: at zero every instrument is in the
-   * center of the field, at one every instrument stands as far to its own
-   * side as it goes, and below zero the whole field is mirrored. The
-   * instruments that stay in the center are not touched.
-   */
-  setStereoSpread(value: number): void {
-    const spread = Math.min(1, Math.max(-1, value));
-    this.settings.spread = spread;
-    this.post({ type: 'spread', value: spread });
     this.wake();
   }
 
@@ -559,13 +556,18 @@ export class PoppyEngine {
       this.post({ type: 'instrGain', instrument, value });
     });
     this.post({ type: 'accentGain', value: this.settings.accentGain });
-    this.post({ type: 'spread', value: this.settings.spread });
     this.settings.instrPan.forEach((value, instrument) => {
       this.post({ type: 'instrPan', instrument, value });
     });
-    this.post({ type: 'snare1Decay', value: this.settings.snare1Decay });
-    this.post({ type: 'snare1Cutoff', value: this.settings.snare1Cutoff });
-    this.post({ type: 'hihatCutoff', value: this.settings.hihatCutoff });
+    this.settings.instrDecay.forEach((value, instrument) => {
+      this.post({ type: 'instrDecay', instrument, value });
+    });
+    this.settings.instrCutoff.forEach((value, instrument) => {
+      this.post({ type: 'instrCutoff', instrument, value });
+    });
+    this.settings.instrFxSend.forEach((value, instrument) => {
+      this.post({ type: 'instrFxSend', instrument, value });
+    });
   }
 
   private post(command: EngineCommand): void {
