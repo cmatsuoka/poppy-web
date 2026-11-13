@@ -488,7 +488,7 @@ body {
 
 .faceplate {
   position: relative;
-  padding: var(--plate-pad-top) var(--plate-pad) 0;
+  padding: var(--plate-pad-top) var(--plate-pad) clamp(5px, 0.72vw, 9px);
   border-radius: 3px;
   color: var(--ink);
   background:
