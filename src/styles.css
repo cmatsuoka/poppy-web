@@ -130,9 +130,6 @@ body {
   position: relative;
   padding: var(--cab-pad);
   border-radius: 16px;
-  /* The black cover slides back into the machine, so it is clipped by the
-     edge of the cabinet. */
-  overflow: hidden;
   background:
     repeating-linear-gradient(
       88deg,
@@ -169,7 +166,7 @@ body {
 /*
  * The black cover. It lies over the metal band at the top of the cabinet,
  * so the write strip is out of sight while the cover is down. In the
- * extended mode the cover slides back into the machine and the strip comes
+ * extended mode the cover slides up out of the machine and the strip comes
  * into view.
  */
 .deck {
@@ -197,9 +194,10 @@ body {
     box-shadow 260ms ease;
 }
 
-/* In the extended mode the black cover slides back and comes to rest over
-   the wooden border at the top of the cabinet. The write strip it hides
-   comes into view, and the faceplate below it does not move.
+/* In the extended mode the black cover slides up past the top edge of the
+   cabinet and comes to rest lying over the page background above the
+   machine. The write strip it hides comes into view, and the faceplate
+   below it does not move.
 
    The same happens in the classic mode when the hidden sequence has
    opened the band of knobs: the cover slides back there too, and the
