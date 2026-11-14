@@ -136,6 +136,16 @@ WASM_EXPORT void poppy_set_tempo(void *ctx, int32_t bpm)
     pops_set_tempo(ctx, (uint16_t)bpm, 0u);
 }
 
+/* The tempo in microseconds per quarter note, the tempo format of MIDI
+ * clocks and MIDI files: 500000 is 120 BPM. The engine clamps it to its
+ * range (240 BPM down to 1 BPM), and the conversion into the beat period
+ * is exact, so a host that follows an external clock does not accumulate
+ * drift against it. */
+WASM_EXPORT void poppy_set_tempo_us(void *ctx, int32_t us_per_quarter)
+{
+    pops_set_tempo_us(ctx, (uint32_t)us_per_quarter);
+}
+
 WASM_EXPORT void poppy_set_volume(void *ctx, int32_t q16)
 {
     pops_set_volume(ctx, q16);

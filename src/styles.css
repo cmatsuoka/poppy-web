@@ -989,6 +989,74 @@ body {
   color: var(--ink);
 }
 
+/* The tempo knob while an external MIDI clock owns the tempo: it stands
+   dimmed and takes no input, the way a knob of the band stands when the
+   engine takes nothing from the instrument the selector stands at. */
+.tempo--dead .knob-base {
+  cursor: default;
+  filter: saturate(0.3) brightness(0.72);
+}
+
+.tempo--dead .knob,
+.tempo--dead .knob:active {
+  cursor: default;
+}
+
+.tempo--dead .tempo-tick {
+  background: rgb(35 35 42 / 35%);
+}
+
+.tempo--dead .tempo-edges,
+.tempo--dead .tempo-name,
+.tempo--dead .tempo-readout {
+  color: rgb(35 35 42 / 38%);
+}
+
+/* The switch that follows an external MIDI clock. It is a small push
+   button under the tempo readout, printed the way the small buttons of
+   the band are. It carries a deliberate addition the original unit did
+   not have, and it prints its work: while the clock is followed it sits
+   pressed, in the red of the bank B names. */
+.midi-sync {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: clamp(4px, 0.6vw, 8px);
+  border: 1px solid rgb(35 35 42 / 40%);
+  border-radius: 2px;
+  padding: clamp(1px, 0.25vw, 3px) clamp(7px, 0.9vw, 12px);
+  background: rgb(255 255 255 / 24%);
+  color: var(--ink-soft);
+  font-family: inherit;
+  line-height: 1.2;
+  font-size: clamp(6px, 0.62vw, 9px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition:
+    transform 90ms ease,
+    box-shadow 90ms ease,
+    background 90ms linear,
+    color 90ms linear;
+}
+
+.midi-sync:hover {
+  color: var(--ink);
+  border-color: rgb(35 35 42 / 60%);
+}
+
+.midi-sync[aria-checked='true'] {
+  border-color: var(--red-ink);
+  background: var(--red-ink);
+  color: #f4f2ec;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 40%);
+}
+
+.midi-sync:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgb(35 35 42 / 45%);
+}
+
 .right-controls {
   display: flex;
   justify-content: flex-end;
@@ -1624,6 +1692,37 @@ body {
     0 0 0 1px rgb(120 30 15 / 60%),
     inset 0 1px 1px rgb(255 255 255 / 55%);
   transform: translateX(-50%) scale(1.25);
+}
+
+/* Replay is armed while the external MIDI clock is followed: the machine
+   waits for the clock's start, and the lamp waits with it. It beats
+   slowly while there is nothing playing - a running machine burns
+   steadily, so the two states stay apart. */
+.start-stop.is-armed:not([aria-pressed='true']) .run-led {
+  animation: run-led-wait 1.8s ease-in-out infinite;
+}
+
+/* A waiting lamp keeps the beat the waiting rhythm keys keep: it only
+   swells and dims, and never changes its mark. */
+@keyframes run-led-wait {
+  0%,
+  100% {
+    background: #a03822;
+    box-shadow:
+      0 0 3px rgb(255 106 74 / 40%),
+      0 0 0 1px rgb(120 30 15 / 60%),
+      inset 0 1px 1px rgb(255 255 255 / 35%);
+    transform: translateX(-50%) scale(1);
+  }
+
+  50% {
+    background: #ff8a5e;
+    box-shadow:
+      0 0 9px rgb(255 106 74 / 80%),
+      0 0 0 1px rgb(120 30 15 / 60%),
+      inset 0 1px 1px rgb(255 255 255 / 55%);
+    transform: translateX(-50%) scale(1.2);
+  }
 }
 
 /* The START legend brightens while the machine runs. */

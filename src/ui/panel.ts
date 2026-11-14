@@ -32,6 +32,7 @@ import {
   type UserPattern,
 } from '../audio/protocol';
 import { seedPan } from '../audio/spread';
+import { MidiClockSync } from '../audio/midi-clock';
 import { FitScaler } from './fit';
 import {
   ControlWriter,
@@ -733,6 +734,15 @@ class Knob {
   private readonly min: number;
   private readonly max: number;
   private readonly onInput: (value: number) => void;
+  /** Whether the knob takes an input at all. */
+  private enabled = true;
+  /**
+   * The print of the tempo the knob does not set.
+   *
+   * While an external clock drives the tempo, the readout tells the tempo
+   * the clock hands over and no longer points at the knob's own value.
+   */
+  private external: string | null = null;
 
   constructor(options: KnobOptions) {
     this.min = options.min;
@@ -778,13 +788,16 @@ class Knob {
     let dragStartY = 0;
     let dragStartValue = 0;
     this.dial.addEventListener('pointerdown', (event) => {
+      if (!this.enabled) {
+        return;
+      }
       dragStartX = event.clientX;
       dragStartY = event.clientY;
       dragStartValue = this.value;
       this.dial.setPointerCapture(event.pointerId);
     });
     this.dial.addEventListener('pointermove', (event) => {
-      if (!this.dial.hasPointerCapture(event.pointerId)) {
+      if (!this.enabled || !this.dial.hasPointerCapture(event.pointerId)) {
         return;
       }
       // The knob turns with the finger, so the drag is measured in the
@@ -807,6 +820,9 @@ class Knob {
     this.dial.addEventListener(
       'wheel',
       (event) => {
+        if (!this.enabled) {
+          return;
+        }
         event.preventDefault();
         this.set(this.value + (event.deltaY < 0 ? 2 : -2), true);
       },
@@ -819,7 +835,7 @@ class Knob {
   set(value: number, notify: boolean): void {
     this.value = clamp(Math.round(value), this.min, this.max);
     this.render();
-    if (notify) {
+    if (notify && this.enabled) {
       this.onInput(this.value);
     }
   }
@@ -827,6 +843,44 @@ class Knob {
   /** The value the knob stands at. */
   get current(): number {
     return this.value;
+  }
+
+  /**
+   * Whether the knob takes an input.
+   *
+   * A knob whose value an external clock owns stands dimmed, and the
+   * screen reader is told it is not available.
+   */
+  setEnabled(enabled: boolean): void {
+    if (enabled === this.enabled) {
+      return;
+    }
+    this.enabled = enabled;
+    this.applyEnabled();
+  }
+
+  /**
+   * The print that stands in for the knob's own readout.
+   *
+   * A null puts the knob's own value back on the readout; a text is
+   * printed as it is, the tempo of the external clock, for example.
+   */
+  setExternal(text: string | null): void {
+    if (text === this.external) {
+      return;
+    }
+    this.external = text;
+    this.render();
+  }
+
+  private applyEnabled(): void {
+    if (this.enabled) {
+      this.dial.removeAttribute('aria-disabled');
+      this.element.classList.remove('tempo--dead');
+    } else {
+      this.dial.setAttribute('aria-disabled', 'true');
+      this.element.classList.add('tempo--dead');
+    }
   }
 
   /**
@@ -846,8 +900,13 @@ class Knob {
     const ratio = (this.value - this.min) / (this.max - this.min);
     this.base.style.setProperty('--angle', `${-135 + ratio * 270}deg`);
     this.dial.setAttribute('aria-valuenow', String(this.value));
-    this.dial.setAttribute('aria-valuetext', `${this.value} beats per minute`);
-    this.readout.value = `${this.value} BPM`;
+    this.dial.setAttribute(
+      'aria-valuetext',
+      this.external === null
+        ? `${this.value} beats per minute`
+        : `${this.value} beats per minute, not in use: the tempo is set by the external MIDI clock`,
+    );
+    this.readout.value = this.external ?? `${this.value} BPM`;
   }
 }
 
@@ -1186,6 +1245,49 @@ export class Panel {
   private readonly faders: Fader[] = [];
   /** The tempo knob of the panel. */
   private tempoKnob!: Knob;
+  /** The switch that follows an external MIDI clock. */
+  private midiSync!: HTMLButtonElement;
+  /** Whether the tempo is being followed from an external MIDI clock. */
+  private midiSyncOn = false;
+  /**
+   * Whether the replay is armed.
+   *
+   * While the clock is followed, a press on the start/stop switch does
+   * not start the machine: it arms the replay, and the machine plays
+   * when the clock starts and stops when the clock stops. The arming
+   * survives a stop, so the clock can start the machine again - it is
+   * taken back by the next press on the switch, or by the sync itself
+   * going off.
+   */
+  private midiArmed = false;
+  /**
+   * The external MIDI clock.
+   *
+   * While it is followed, the clock hands the tempo over in microseconds
+   * per quarter note, the tempo setting knob stands dimmed, and its
+   * readout prints the tempo the clock reports. The messages of the
+   * transport follow with it - a start or a continue plays, a stop takes
+   * the machine out - and they can only be read by the inputs the sync
+   * listens to, so none of it happens while the sync is off.
+   */
+  private readonly midi = new MidiClockSync({
+    onTempo: (tempo) => {
+      this.engine.setTempoUs(tempo.usPerQuarter);
+      this.tempoKnob.setExternal(`${Math.round(tempo.bpm)} BPM`);
+    },
+    onStart: () => {
+      // The machine only plays on a start that it waits for: the press
+      // on the switch armed the replay, and so it is what the clock
+      // starts.
+      if (!this.midiArmed) {
+        return;
+      }
+      this.startTransport();
+    },
+    onStop: () => {
+      this.stopTransport();
+    },
+  });
   /**
    * The positions of the controls of the last visit.
    *
@@ -2089,6 +2191,28 @@ export class Panel {
     });
     this.tempoKnob = tempo;
 
+    // The switch that follows an external MIDI clock. It is a deliberate
+    // addition to the panel: the machine has no such switch, and the knob
+    // of the tempo gives the tempo to it only while no clock does. While
+    // the clock is followed, the knob stands dimmed and its readout
+    // prints the tempo the clock hands over.
+    const midiSync = element('button', 'midi-sync');
+    midiSync.type = 'button';
+    midiSync.tabIndex = -1;
+    midiSync.setAttribute('role', 'switch');
+    midiSync.setAttribute('aria-checked', 'false');
+    midiSync.setAttribute('aria-label', 'Follow an external MIDI clock');
+    midiSync.setAttribute(
+      'title',
+      'Follow the tempo of an external MIDI clock: the tempo knob is not used while it plays',
+    );
+    midiSync.append(element('span', 'midi-sync-mark', 'MIDI SYNC'));
+    midiSync.addEventListener('click', () => {
+      void this.toggleMidiSync();
+    });
+    this.midiSync = midiSync;
+    tempo.element.append(midiSync);
+
     const right = element('div', 'right-controls');
     const lampBlock = element('div', 'lamp-block');
 
@@ -2337,20 +2461,71 @@ export class Panel {
     if (this.startStop.disabled) {
       return;
     }
+    // While the external clock is followed, the press does not start the
+    // machine: it arms the replay, and the machine plays when the clock
+    // starts and stops when the clock stops. Without the clock, the press
+    // starts and stops the machine itself.
+    if (this.midiSyncOn) {
+      this.toggleArmedReplay();
+      return;
+    }
     if (this.transportIntent) {
-      this.transportIntent = false;
-      this.engine.stop();
-      // The engine throws a selection away that waits for the end of the
-      // cycle: its next snapshot would roll the keys back to the rhythm
-      // that was sounding. The machine stops with the keys the way the
-      // user left them instead — what was pressed, pending or not, is
-      // given to the engine again, and a stopped transport takes it at
-      // once.
-      const bank = this.displayedBank();
-      const buttons = this.displayedButtons();
-      if (bank !== this.state.bank || buttons !== this.state.buttons) {
-        this.requestSelection(bank, buttons);
-      }
+      this.stopTransport();
+      return;
+    }
+    this.startTransport();
+  }
+
+  /**
+   * Arm the replay, or take the arming back.
+   *
+   * While the clock is followed, the press arms the replay: the machine
+   * waits for the start of the clock, plays when the clock says start or
+   * continue, and stops when it says stop. The waiting survives the stop,
+   * so the machine plays again on the next start without a new press; the
+   * press that comes while the replay is armed takes the waiting back,
+   * and a machine that plays stops with it - the press answers to the
+   * user, not to the clock.
+   */
+  private toggleArmedReplay(): void {
+    if (!this.midiArmed) {
+      this.midiArmed = true;
+      this.renderArmed();
+      this.showStatus('Replay is armed: it plays when the clock starts', false);
+      return;
+    }
+    this.midiArmed = false;
+    if (this.transportIntent) {
+      this.stopTransport();
+    }
+    this.renderArmed();
+    this.showStatus('Replay is not armed', false);
+  }
+
+  /** Show whether the replay waits for the MIDI clock's start. */
+  private renderArmed(): void {
+    this.startStop.classList.toggle('is-armed', this.midiArmed);
+    // The screen reader is told what the switch does now: while the
+    // replay is armed, the press works on the waiting and not on the
+    // transport.
+    const label = this.midiArmed
+      ? 'Replay is armed: it waits for the start of the MIDI clock. A press takes the arming back'
+      : 'Start or stop rhythm';
+    if (this.startStop.getAttribute('aria-label') !== label) {
+      this.startStop.setAttribute('aria-label', label);
+    }
+  }
+
+  /**
+   * Begin playing.
+   *
+   * The context is woken, the machine picks up the selection the keys
+   * hold, and the transport runs from the first step of the cycle. It is
+   * what the start of the switch does; the external MIDI clock lands
+   * here too when its start or continue message arrives.
+   */
+  private startTransport(): void {
+    if (this.transportIntent) {
       return;
     }
     this.transportIntent = true;
@@ -2370,6 +2545,35 @@ export class Panel {
       });
   }
 
+  /**
+   * Take the machine out of playing.
+   *
+   * The stop keeps the keys the way the user left them: a selection that
+   * waits for the end of the cycle is given to the engine again
+   * afterwards, so the stopped machine holds the keys that were pressed
+   * and does not roll back to the rhythm that was sounding. It is what
+   * the stop of the switch does; the external MIDI clock lands here too
+   * when its stop message arrives.
+   */
+  private stopTransport(): void {
+    if (!this.transportIntent) {
+      return;
+    }
+    this.transportIntent = false;
+    this.engine.stop();
+    // The engine throws a selection away that waits for the end of the
+    // cycle: its next snapshot would roll the keys back to the rhythm
+    // that was sounding. The machine stops with the keys the way the
+    // user left them instead — what was pressed, pending or not, is
+    // given to the engine again, and a stopped transport takes it at
+    // once.
+    const bank = this.displayedBank();
+    const buttons = this.displayedButtons();
+    if (bank !== this.state.bank || buttons !== this.state.buttons) {
+      this.requestSelection(bank, buttons);
+    }
+  }
+
   private selectBank(bank: Bank): void {
     if (this.displayedBank() === bank) {
       return;
@@ -2380,6 +2584,74 @@ export class Panel {
     if (!this.bandUnlocked && this.displayedSource() === PATTERN_SOURCE_PRESET) {
       this.bandCode.noteSelector(bank);
     }
+  }
+
+  /**
+   * Follow an external MIDI clock, or hand the tempo back to the knob.
+   *
+   * While the clock is followed, the tempo it reports is given to the
+   * engine in microseconds per quarter note and the tempo setting knob
+   * stands dimmed: it is not usable, and its readout prints the tempo
+   * the clock reports instead of the value it points at. The messages of
+   * the transport follow with it: a start or a continue plays, and a
+   * stop takes the machine out. All of it only while the clock is
+   * followed, because no input is read otherwise.
+   *
+   * When the clock is let go, the knob is the tempo source again: the
+   * value it points at is given to the engine, and it reads its own BPM
+   * back. The way the switch stands is not kept between visits: following
+   * a clock asks for the MIDI inputs of the browser, and it asks only
+   * when the user wants it.
+   */
+  private async toggleMidiSync(): Promise<void> {
+    if (this.midiSyncOn) {
+      this.midi.disable();
+      this.midiSyncOn = false;
+      // The arming waited for the clock, and there is no clock to wait
+      // for any more: the replay is taken out of it, and the press on the
+      // switch plays the machine itself again.
+      this.midiArmed = false;
+      this.renderArmed();
+      this.renderMidiSync();
+      this.tempoKnob.setExternal(null);
+      this.tempoKnob.setEnabled(true);
+      // The knob is the tempo source again: the engine takes the value it
+      // stands at, so the machine plays at the tempo the print says.
+      this.engine.setTempo(this.tempoKnob.current);
+      this.showStatus('External MIDI sync is off', false);
+      return;
+    }
+
+    let inputs = 0;
+    try {
+      inputs = await this.midi.enable();
+    } catch (error: unknown) {
+      // The sync stays off: the tempo knob keeps its place.
+      this.showStatus(
+        error instanceof Error ? error.message : String(error),
+        true,
+      );
+      return;
+    }
+
+    this.midiSyncOn = true;
+    this.renderMidiSync();
+    this.tempoKnob.setEnabled(false);
+    // The first clock pulse has not arrived yet: the readout says where
+    // the tempo comes from, and the tempo of the clock replaces it.
+    this.tempoKnob.setExternal('MIDI');
+    this.showStatus(
+      inputs > 0
+        ? 'External MIDI sync is on: the clock sets the tempo and the transport'
+        : 'External MIDI sync is on, but no MIDI inputs are connected',
+      false,
+    );
+  }
+
+  /** Show whether the external MIDI clock is followed. */
+  private renderMidiSync(): void {
+    this.midiSync.setAttribute('aria-checked', this.midiSyncOn ? 'true' : 'false');
+    this.midiSync.classList.toggle('is-on', this.midiSyncOn);
   }
 
   /**

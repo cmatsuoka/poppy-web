@@ -363,6 +363,9 @@ class PoppyProcessor extends AudioWorkletProcessor {
       case 'tempo':
         module._poppy_set_tempo(this.context, command.bpm);
         break;
+      case 'tempoUs':
+        module._poppy_set_tempo_us(this.context, command.usPerQuarter);
+        break;
       case 'volume':
         module._poppy_set_volume(this.context, command.value);
         break;

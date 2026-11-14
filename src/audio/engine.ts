@@ -266,6 +266,21 @@ export class PoppyEngine {
     this.post({ type: 'tempo', bpm: this.settings.tempo });
   }
 
+  /**
+   * The tempo an external MIDI clock hands over, in microseconds per
+   * quarter note: 500000 is 120 BPM.
+   *
+   * The engine takes the value as it is and converts it exactly, so a host
+   * that follows the clock does not accumulate drift against it. The
+   * tempo setting reads back in beats per minute, the way it does for the
+   * knob, so the rest of the panel follows the tempo the machine runs at.
+   */
+  setTempoUs(usPerQuarter: number): void {
+    const us = Math.min(60000000, Math.max(250000, Math.round(usPerQuarter)));
+    this.settings.tempo = Math.round(60000000 / us);
+    this.post({ type: 'tempoUs', usPerQuarter: us });
+  }
+
   setVolume(value: number): void {
     this.settings.volume = value;
     this.post({ type: 'volume', value });

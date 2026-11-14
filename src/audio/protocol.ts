@@ -301,6 +301,12 @@ export type EngineCommand =
   | { type: 'select'; bank: Bank; buttons: number }
   | { type: 'trigger'; instrument: number; velocity: number }
   | { type: 'tempo'; bpm: number }
+  /**
+   * Set the tempo the way an external MIDI clock hands it over: in
+   * microseconds per quarter note. The conversion in the engine is exact,
+   * so a host that follows the clock does not drift against it.
+   */
+  | { type: 'tempoUs'; usPerQuarter: number }
   | { type: 'volume'; value: number }
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }
