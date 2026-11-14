@@ -774,9 +774,11 @@ class Knob {
 
     this.element.append(ticks, this.base, caption, this.readout);
 
+    let dragStartX = 0;
     let dragStartY = 0;
     let dragStartValue = 0;
     this.dial.addEventListener('pointerdown', (event) => {
+      dragStartX = event.clientX;
       dragStartY = event.clientY;
       dragStartValue = this.value;
       this.dial.setPointerCapture(event.pointerId);
@@ -787,7 +789,13 @@ class Knob {
       }
       // The knob turns with the finger, so the drag is measured in the
       // size the knob is seen at, not in the size it is laid out in.
-      const delta = (dragStartY - event.clientY) / this.scale() * 0.85;
+      // Up and to the right raise the value, down and to the left lower
+      // it, so a knob at the top or the bottom edge of a touch screen
+      // keeps the length of the drag it needs across the short axis.
+      const delta =
+        (dragStartY - event.clientY + (event.clientX - dragStartX)) /
+        this.scale() *
+        0.85;
       this.set(dragStartValue + delta, true);
     });
     this.dial.addEventListener('pointerup', (event) => {
@@ -953,6 +961,7 @@ class MiniKnob {
     }
     this.element.append(this.caption);
 
+    let dragStartX = 0;
     let dragStartY = 0;
     let dragStartTravel = 0;
     this.dial.addEventListener('pointerdown', (event) => {
@@ -960,6 +969,7 @@ class MiniKnob {
         return;
       }
       this.dragging = true;
+      dragStartX = event.clientX;
       dragStartY = event.clientY;
       dragStartTravel = this.travelOf(this.value);
       this.stepNotified = this.steps > 0 ? this.stepOf(this.value) : null;
@@ -970,13 +980,19 @@ class MiniKnob {
         return;
       }
       // The knob turns with the finger, so the drag is measured in the
-      // size the knob is seen at, not in the size it is laid out in. A
+      // size the knob is seen at, not in the size it is laid out in. Up
+      // and to the right raise the value, down and to the left lower it,
+      // so a knob at the top or the bottom edge of a touch screen keeps
+      // the length of the drag it needs across the short axis. A
       // stepped knob travels freely while it is held and slots itself
       // into a detent when it is released. The detent under the finger
       // is reported as it changes, so what the knob selects follows the
       // turn and not only the end of it.
       const travel =
-        dragStartTravel + (dragStartY - event.clientY) / this.scale() / MINI_KNOB_TRAVEL;
+        dragStartTravel +
+        (dragStartY - event.clientY + (event.clientX - dragStartX)) /
+          this.scale() /
+          MINI_KNOB_TRAVEL;
       const value = this.valueOf(travel);
       this.set(value, this.steps === 0, this.steps === 0);
       if (this.steps > 0) {
