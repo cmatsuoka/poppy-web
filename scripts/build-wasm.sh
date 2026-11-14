@@ -18,7 +18,7 @@ LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpops.git}"
 # The rename to libpops, the sound adjustments the panel is written
 # against, and the adjustable high-pass of the cymbals are upstream now.
 # Update this deliberately: the API is still moving.
-LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-0c32bcf2a5c89acbb7b0c16a70384689eac43fe4}"
+LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-65a62445a5cb46d4da46ae98f5b3bc78b380d124}"
 # The checkout of the library that carries the newest API.
 LIBPOPS_SIBLING="${LIBPOPS_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.

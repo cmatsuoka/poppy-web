@@ -133,7 +133,7 @@ WASM_EXPORT void poppy_stop_rhythms(void *ctx)
 
 WASM_EXPORT void poppy_set_tempo(void *ctx, int32_t bpm)
 {
-    pops_set_tempo(ctx, (uint16_t)bpm);
+    pops_set_tempo(ctx, (uint16_t)bpm, 0u);
 }
 
 WASM_EXPORT void poppy_set_volume(void *ctx, int32_t q16)
