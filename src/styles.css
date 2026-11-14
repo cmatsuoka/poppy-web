@@ -34,7 +34,6 @@
   --key-edge: #aeaa9d;
   --lamp-a: #2b7e8d;
   --lamp-b: #b03a20;
-  --focus: #1b5a78;
   --gap: clamp(2px, 0.35vw, 6px);
   /* The vertical rhythm of the printed names: the size of the print, the
      height of a line of names, the space from the top of the section to
@@ -83,6 +82,13 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* The panel is touch and pointer only: no control shows a focus marker. */
+button:focus,
+input:focus,
+select:focus {
+  outline: none;
 }
 
 html,
@@ -327,11 +333,6 @@ body {
   box-shadow: 0 0 3px rgb(0 0 0 / 45%);
 }
 
-.mini-dial:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-}
-
 /* The first line under the dial stands a little apart from it. */
 .mini-dial + .mini-readout,
 .mini-dial + .mini-caption {
@@ -432,11 +433,6 @@ body {
   box-shadow: inset 0 2px 4px rgb(0 0 0 / 70%);
 }
 
-.write-strip-memory:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 /* The square button at the end of the band that puts the knobs of the
    selected memory position back. It is as big as the square of the memory
    positions next to it, and it is black. The word on it is printed, the
@@ -485,11 +481,6 @@ body {
   background: linear-gradient(#3b3b42, #232328);
   border-color: rgb(0 0 0 / 55%);
   color: #eae7de;
-}
-
-.write-strip-reset:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 
 .faceplate {
@@ -858,12 +849,6 @@ body {
   padding-top: clamp(4px, 0.6vw, 8px);
 }
 
-.fader:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
 .tempo {
   position: relative;
   display: flex;
@@ -974,11 +959,6 @@ body {
   border-radius: 2px;
   background: linear-gradient(#f6f2e6, #b9b2a0);
   box-shadow: 0 0 4px rgb(0 0 0 / 45%);
-}
-
-.knob:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 4px;
 }
 
 .tempo-caption {
@@ -1234,12 +1214,6 @@ body {
   transform: translateY(-50%) rotate(-24deg);
 }
 
-.bank-switch:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
 /*
  * The mode lever stands above the bank lever, in the same column. It picks
  * the factory rhythms (the lever is up) or the user patterns (the lever is
@@ -1278,12 +1252,6 @@ body {
 
 .mode-mark-user {
   color: var(--red-ink);
-}
-
-.mode-switch:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 3px;
 }
 
 /* The printed marks of the mode lever: one at each end of its travel.
@@ -1548,11 +1516,6 @@ body {
   animation: key-tick-pulse 1.8s ease-in-out infinite;
 }
 
-.rhythm-key:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 /* The start/stop switch is a key like the rhythm keys, but dark grey so
    it stands out from the ivory ones and does not vanish into the black
    keybed. */
@@ -1670,12 +1633,6 @@ body {
   text-shadow:
     0 0 6px rgb(255 106 74 / 80%),
     0 1px 1px rgb(0 0 0 / 70%);
-}
-
-.start-stop:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 
 .status {
@@ -1810,12 +1767,6 @@ body {
   border-color: rgb(35 35 42 / 25%);
 }
 
-.pattern-name--input:focus {
-  outline: none;
-  border-color: var(--ink);
-  background: rgb(255 255 255 / 50%);
-}
-
 .pattern-name--pending {
   font-weight: 700;
   font-size: 0.8em;
@@ -1897,25 +1848,12 @@ body {
   pointer-events: all;
 }
 
-/* The cursor: the step of the grid the keyboard is on. */
+/* The cursor: the step of the grid the pointer last worked on. */
 .pattern-grid-cursor {
   fill: none;
-  stroke: rgb(35 35 42 / 30%);
-  stroke-width: 1;
-  pointer-events: none;
-}
-
-/* The grid carries its own indicator: the cursor around the step the
-   keyboard is on says where the editing goes, so the ring of the browser
-   has nothing to add to it, and the cursor is strong whenever the grid is
-   the field. */
-.pattern-grid:focus {
-  outline: none;
-}
-
-.pattern-grid:focus .pattern-grid-cursor {
   stroke: var(--ink);
   stroke-width: 1.5;
+  pointer-events: none;
 }
 
 .pattern-grid-hit--perc {
@@ -1935,17 +1873,11 @@ body {
 }
 
 /* A step of the accent row. It is a switch: it is clicked to accent a
-   step, and the keyboard walks over the row. */
+   step. */
 .pattern-grid-cell {
   fill: transparent;
   pointer-events: all;
   cursor: pointer;
-}
-
-.pattern-grid-cell:focus {
-  outline: none;
-  stroke: var(--ink);
-  stroke-width: 1;
 }
 
 /* The bar that joins the ends of a run of Guiro hits. */
@@ -2035,11 +1967,6 @@ body {
   border-color: rgb(35 35 42 / 55%);
 }
 
-.pattern-card-expand:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
-}
-
 .pattern-card-expand[hidden] {
   display: none;
 }
@@ -2093,11 +2020,6 @@ body {
 .pattern-card-meter-select:disabled {
   opacity: 0.35;
   cursor: default;
-}
-
-.pattern-card-meter-select:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
 }
 
 /* The meter of the pattern is printed like the other flags of the card. */
@@ -2169,11 +2091,6 @@ body {
 .pattern-card-tool:hover:not(:disabled) {
   color: var(--ink);
   border-color: rgb(35 35 42 / 55%);
-}
-
-.pattern-card-tool:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 1px;
 }
 
 .pattern-card-tool:disabled {

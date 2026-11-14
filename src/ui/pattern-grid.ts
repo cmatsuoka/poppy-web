@@ -36,7 +36,6 @@ import {
   PATTERN_ACCENT_BIT,
   PATTERN_COLUMNS,
   PATTERN_SOURCE_USER,
-  PATTERN_STEPS_PER_BAR,
   RHYTHM_NAMES,
   type Bank,
   type PanelState,
@@ -181,7 +180,6 @@ export class PatternGrid {
   private readonly nameRow: HTMLSpanElement;
   private readonly metaRow: HTMLSpanElement;
   private readonly stateRow: HTMLParagraphElement;
-  private readonly description: HTMLParagraphElement;
   /** The control that opens the card to the voices that are still empty. */
   private readonly expandButton: HTMLButtonElement;
   /** The control that picks the meter of the pattern. */
@@ -228,7 +226,7 @@ export class PatternGrid {
   private buttons = 0;
   private source: PatternSource = 0;
   /**
-   * The row of the grid the keyboard is on and the step it points at.
+   * The row of the grid the cursor is on and the step it points at.
    *
    * The last row of the grid is the accent row, so the cursor reaches the
    * accents as well.
@@ -351,6 +349,7 @@ export class PatternGrid {
     this.expandButton = document.createElement('button');
     this.expandButton.className = 'pattern-card-expand';
     this.expandButton.type = 'button';
+    this.expandButton.tabIndex = -1;
     this.expandButton.setAttribute('aria-pressed', 'false');
     this.expandButton.textContent = 'All voices';
     this.expandButton.title =
@@ -371,11 +370,6 @@ export class PatternGrid {
         this.render();
       }
     });
-    // The control does not take the focus away from the grid, so the
-    // keyboard can go on writing where it was.
-    this.expandButton.addEventListener('mousedown', (event) => {
-      event.preventDefault();
-    });
 
     // The control that picks the meter of the pattern: the meter says how
     // many of the steps of a bar the machine plays. It belongs to the
@@ -388,6 +382,7 @@ export class PatternGrid {
     meterLabel.textContent = 'Meter';
     this.meterSelect = document.createElement('select');
     this.meterSelect.className = 'pattern-card-meter-select';
+    this.meterSelect.tabIndex = -1;
     for (const meter of METERS) {
       const option = document.createElement('option');
       option.value = meter.label;
@@ -489,20 +484,12 @@ export class PatternGrid {
     // There is nothing to paste before something has been copied.
     this.setClipboard(false);
 
-    // The spoken description of the pattern. In the extended mode the grid
-    // itself carries the accent row, which a screen reader has to reach,
-    // so the drawing is hidden and the description is read out instead.
-    this.description = document.createElement('p');
-    this.description.className = 'visually-hidden';
-    this.description.id = 'pattern-card-description';
-
-    this.element.append(head, this.body, foot, this.toolsRow, this.description);
+    this.element.append(head, this.body, foot, this.toolsRow);
     host.append(this.element);
 
     // The grid is a switchboard in the extended mode: a click puts a voice
-    // into a step, and the keyboard walks over the grid.
+    // into a step.
     this.svg.addEventListener('click', (event) => this.onGridClick(event));
-    this.svg.addEventListener('keydown', (event) => this.onGridKeyDown(event));
 
     // A name that is changed on the card is printed on the key bed, and a
     // name that is changed elsewhere belongs on the card as well.
@@ -623,6 +610,7 @@ export class PatternGrid {
     const button = document.createElement('button');
     button.className = `pattern-card-tool ${className}`.trim();
     button.type = 'button';
+    button.tabIndex = -1;
     button.textContent = label;
     button.title = title;
     button.setAttribute('aria-label', title);
@@ -872,6 +860,7 @@ export class PatternGrid {
       rhythm < 10 ? 'pattern-name--a' : 'pattern-name--b'
     }`;
     node.type = 'text';
+    node.tabIndex = -1;
     node.maxLength = MAX_NAME_LENGTH;
     node.value = this.nameFor(rhythm);
     node.setAttribute('aria-label', 'Name of the user pattern');
@@ -1092,7 +1081,7 @@ export class PatternGrid {
   }
 
   /**
-   * The cursor: the step of the grid the keyboard is on.
+   * The cursor: the step of the grid the pointer last worked on.
    */
   private renderCursor(pattern: CardPattern): void {
     if (this.source !== PATTERN_SOURCE_USER || this.isCombined()) {
@@ -1112,28 +1101,10 @@ export class PatternGrid {
     this.cursor.setAttribute('height', String(ROW_HEIGHT - 2));
   }
 
-  /**
-   * The grid is a picture in the preset mode and a switchboard in the
-   * extended mode, where the keyboard walks over it.
-   */
+  /** The grid is a picture, and its description is the pattern it prints. */
   private updateAria(pattern: CardPattern): void {
-    if (this.source === PATTERN_SOURCE_USER && !this.isCombined()) {
-      this.svg.setAttribute('role', 'group');
-      this.svg.setAttribute('tabindex', '0');
-      // The name of the grid is the step the cursor is on, so a screen
-      // reader says where the keyboard is.
-      this.svg.setAttribute('aria-label', this.cursorLabel(pattern));
-      this.svg.setAttribute('aria-describedby', this.description.id);
-      this.layer.setAttribute('aria-hidden', 'true');
-      this.description.textContent = `Pattern grid. ${this.describe(pattern)}`;
-      return;
-    }
-
     this.svg.setAttribute('role', 'img');
-    this.svg.removeAttribute('tabindex');
     this.svg.setAttribute('aria-label', this.describe(pattern));
-    this.svg.removeAttribute('aria-describedby');
-    this.layer.removeAttribute('aria-hidden');
   }
 
   /**
@@ -1245,65 +1216,6 @@ export class PatternGrid {
     this.render();
   }
 
-  /** The keyboard walks over the grid. */
-  private onGridKeyDown(event: KeyboardEvent): void {
-    const pattern = this.pattern;
-    if (
-      pattern === null ||
-      this.source !== PATTERN_SOURCE_USER ||
-      this.isCombined()
-    ) {
-      return;
-    }
-
-    const lastRow = pattern.rows.length;
-    let handled = true;
-    switch (event.key) {
-      case 'ArrowUp':
-        this.cursorRow = Math.max(0, this.cursorRow - 1);
-        break;
-      case 'ArrowDown':
-        this.cursorRow = Math.min(lastRow, this.cursorRow + 1);
-        break;
-      case 'ArrowLeft':
-        this.cursorColumn = Math.max(0, this.cursorColumn - 1);
-        break;
-      case 'ArrowRight':
-        this.cursorColumn = Math.min(PATTERN_COLUMNS - 1, this.cursorColumn + 1);
-        break;
-      case 'Home':
-        this.cursorColumn = 0;
-        break;
-      case 'End':
-        this.cursorColumn = PATTERN_COLUMNS - 1;
-        break;
-      case 'PageUp':
-        this.cursorColumn = Math.max(
-          0,
-          this.cursorColumn - PATTERN_STEPS_PER_BAR,
-        );
-        break;
-      case 'PageDown':
-        this.cursorColumn = Math.min(
-          PATTERN_COLUMNS - 1,
-          this.cursorColumn + PATTERN_STEPS_PER_BAR,
-        );
-        break;
-      case 'Enter':
-      case ' ':
-        this.toggleCell();
-        break;
-      default:
-        handled = false;
-    }
-
-    if (!handled) {
-      return;
-    }
-    event.preventDefault();
-    this.render();
-  }
-
   /**
    * Put the voice of the row into the step of the cursor, or take it out
    * again. The last row of the grid is the accent row.
@@ -1325,23 +1237,6 @@ export class PatternGrid {
     const bit = 1 << instrument;
     const on = ((pattern.notes[column] ?? 0) & bit) === 0;
     this.onToggle?.(instrument, column, on);
-  }
-
-  /** What the cursor points at, for the screen reader. */
-  private cursorLabel(pattern: CardPattern): string {
-    const step = this.cursorColumn + 1;
-    if (!this.isEnabled(pattern, this.cursorColumn)) {
-      return `Step ${step}: skipped, the meter leaves it out`;
-    }
-    if (this.cursorRowOf(pattern) >= pattern.rows.length) {
-      const accented = pattern.accents[this.cursorColumn] === true;
-      return `Accent on step ${step}: ${accented ? 'on' : 'off'}`;
-    }
-    const instrument = pattern.rows[this.cursorRowOf(pattern)] ?? 0;
-    const name = INSTRUMENT_NAMES[instrument] ?? '';
-    const bit = 1 << instrument;
-    const plays = ((pattern.notes[this.cursorColumn] ?? 0) & bit) !== 0;
-    return `${name} on step ${step}: ${plays ? 'plays' : 'empty'}`;
   }
 
   /**

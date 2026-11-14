@@ -470,8 +470,7 @@ interface KeyPress {
   /** The press is one half of a chord. */
   chord: boolean;
   /**
-   * The place the key was when the finger went down. A press of the
-   * keyboard has no place, so it has none either.
+   * The place the key was when the finger went down.
    */
   footprint: Footprint | null;
 }
@@ -629,7 +628,6 @@ class Fader {
 
     const scaleSide = options.scale ?? 'right';
     this.element = element('div', `fader fader--${scaleSide}`);
-    this.element.tabIndex = 0;
     this.element.setAttribute('role', 'slider');
     this.element.setAttribute('aria-orientation', 'vertical');
     this.element.setAttribute(
@@ -660,7 +658,6 @@ class Fader {
 
     this.element.addEventListener('pointerdown', (event) => {
       this.element.setPointerCapture(event.pointerId);
-      this.element.focus();
       this.pointerTo(event.clientY);
     });
     this.element.addEventListener('pointermove', (event) => {
@@ -673,29 +670,6 @@ class Fader {
     });
     this.element.addEventListener('pointercancel', (event) => {
       this.element.releasePointerCapture(event.pointerId);
-    });
-    this.element.addEventListener('keydown', (event) => {
-      const step = event.shiftKey ? 10 : 1;
-      let next: number | null = null;
-
-      if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-        next = this.value + step;
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-        next = this.value - step;
-      } else if (event.key === 'PageUp') {
-        next = this.value + 10;
-      } else if (event.key === 'PageDown') {
-        next = this.value - 10;
-      } else if (event.key === 'Home') {
-        next = 0;
-      } else if (event.key === 'End') {
-        next = 100;
-      }
-
-      if (next !== null) {
-        event.preventDefault();
-        this.set(next, true);
-      }
     });
 
     this.resizeObserver = new ResizeObserver(() => this.position());
@@ -777,7 +751,6 @@ class Knob {
 
     this.base = element('div', 'knob-base');
     this.dial = element('div', 'knob');
-    this.dial.tabIndex = 0;
     this.dial.setAttribute('role', 'slider');
     this.dial.setAttribute('aria-label', 'Tempo');
     this.dial.setAttribute('aria-valuemin', String(this.min));
@@ -807,7 +780,6 @@ class Knob {
       dragStartY = event.clientY;
       dragStartValue = this.value;
       this.dial.setPointerCapture(event.pointerId);
-      this.dial.focus();
     });
     this.dial.addEventListener('pointermove', (event) => {
       if (!this.dial.hasPointerCapture(event.pointerId)) {
@@ -832,29 +804,6 @@ class Knob {
       },
       { passive: false },
     );
-    this.dial.addEventListener('keydown', (event) => {
-      const step = event.shiftKey ? 10 : 1;
-      let next: number | null = null;
-
-      if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-        next = this.value + step;
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-        next = this.value - step;
-      } else if (event.key === 'PageUp') {
-        next = this.value + 10;
-      } else if (event.key === 'PageDown') {
-        next = this.value - 10;
-      } else if (event.key === 'Home') {
-        next = this.min;
-      } else if (event.key === 'End') {
-        next = this.max;
-      }
-
-      if (next !== null) {
-        event.preventDefault();
-        this.set(next, true);
-      }
-    });
 
     this.render();
   }
@@ -913,8 +862,8 @@ interface MiniKnobOptions {
    * How many detents the knob slots itself into.
    *
    * A knob with detents travels freely under the finger and slots itself
-   * into the nearest of them when it is released; the arrow keys and the
-   * wheel move it from one detent to the next.
+   * into the nearest of them when it is released; the wheel moves it from
+   * one detent to the next.
    */
   steps?: number;
   /**
@@ -983,7 +932,6 @@ class MiniKnob {
 
     this.element = element('div', 'mini-knob');
     this.dial = element('div', 'mini-dial');
-    this.dial.tabIndex = 0;
     this.dial.setAttribute('role', 'slider');
     this.dial.setAttribute('aria-label', options.ariaLabel);
     this.dial.setAttribute('aria-valuemin', String(this.min));
@@ -1016,7 +964,6 @@ class MiniKnob {
       dragStartTravel = this.travelOf(this.value);
       this.stepNotified = this.steps > 0 ? this.stepOf(this.value) : null;
       this.dial.setPointerCapture(event.pointerId);
-      this.dial.focus();
     });
     this.dial.addEventListener('pointermove', (event) => {
       if (!this.enabled || !this.dial.hasPointerCapture(event.pointerId)) {
@@ -1063,32 +1010,6 @@ class MiniKnob {
       },
       { passive: false },
     );
-    this.dial.addEventListener('keydown', (event) => {
-      if (!this.enabled) {
-        return;
-      }
-      const step = this.step() * (event.shiftKey ? 10 : 1);
-      const travel = this.travelOf(this.value);
-      let next: number | null = null;
-      if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-        next = this.valueOf(travel + step);
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-        next = this.valueOf(travel - step);
-      } else if (event.key === 'PageUp') {
-        next = this.valueOf(travel + step * 10);
-      } else if (event.key === 'PageDown') {
-        next = this.valueOf(travel - step * 10);
-      } else if (event.key === 'Home') {
-        next = this.min;
-      } else if (event.key === 'End') {
-        next = this.max;
-      }
-
-      if (next !== null) {
-        event.preventDefault();
-        this.set(next, true);
-      }
-    });
 
     this.render();
   }
@@ -1133,8 +1054,8 @@ class MiniKnob {
    * Whether the knob takes an input.
    *
    * A knob the engine takes nothing from for the instrument the selector
-   * stands at stands dimmed, out of the order of the tab key, and the
-   * screen reader is told it is not available.
+   * stands at stands dimmed, and the screen reader is told it is not
+   * available.
    */
   setEnabled(enabled: boolean): void {
     if (enabled === this.enabled) {
@@ -1145,7 +1066,6 @@ class MiniKnob {
   }
 
   private applyEnabled(): void {
-    this.dial.tabIndex = this.enabled ? 0 : -1;
     if (this.enabled) {
       this.dial.removeAttribute('aria-disabled');
       this.element.classList.remove('mini-knob--dead');
@@ -1173,7 +1093,7 @@ class MiniKnob {
   }
 
   /**
-   * How much one step of the arrow keys moves the knob, as a part of the
+   * How much one step of the wheel moves the knob, as a part of the
    * travel: a hundredth of the dial for a knob that turns freely, one
    * detent for a knob that slots into them.
    */
@@ -1422,12 +1342,8 @@ export class Panel {
   private readonly bandCode = new BandCode(() => this.openBand());
 
   // The keys that are being held down. A pointer press belongs to the
-  // pointer that made it, so a second finger can hold a second key; the
-  // keyboard has a press of its own. The keyboard click must not be
-  // carried out twice.
+  // pointer that made it, so a second finger can hold a second key.
   private readonly pointerPresses = new Map<number, KeyPress>();
-  private keyPress: KeyPress | null = null;
-  private keyboardHandled = false;
   private readonly shortcutKeys = new Map<string, number>();
 
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1702,6 +1618,7 @@ export class Panel {
     for (let index = 0; index < BAND_MEMORY_COUNT; index += 1) {
       const button = element('button', 'write-strip-memory');
       button.type = 'button';
+      button.tabIndex = -1;
       button.textContent = String(index + 1);
       button.title = `Memory position ${index + 1} of the knobs`;
       button.setAttribute('aria-label', button.title);
@@ -1719,6 +1636,7 @@ export class Panel {
     // not throw the settings away.
     const reset = element('button', 'write-strip-reset');
     reset.type = 'button';
+    reset.tabIndex = -1;
     reset.title =
       'Hold to put the knobs of the selected memory position back to the defaults';
     reset.setAttribute('aria-label', reset.title);
@@ -1986,8 +1904,8 @@ export class Panel {
    *
    * The reset throws the settings of the memory position away, so a click
    * that was not meant must not do it: the reset runs only when the button
-   * has been held for RESET_HOLD_MS, with the pointer or the keyboard. The
-   * click the browser fires when the button is let go is swallowed.
+   * has been held for RESET_HOLD_MS with the pointer. The click the browser
+   * fires when the button is let go is swallowed.
    */
   private armResetButton(button: HTMLButtonElement): void {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2018,18 +1936,6 @@ export class Panel {
     });
     button.addEventListener('pointerup', cancel);
     button.addEventListener('pointercancel', cancel);
-    button.addEventListener('keydown', (event) => {
-      if ((event.key !== 'Enter' && event.key !== ' ') || event.repeat) {
-        return;
-      }
-      begin();
-    });
-    button.addEventListener('keyup', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        cancel();
-      }
-    });
-    button.addEventListener('blur', cancel);
     button.addEventListener('click', (event) => {
       event.preventDefault();
     });
@@ -2176,6 +2082,7 @@ export class Panel {
     // rhythm names they belong to, and is built with the rhythm section.
     this.modeSwitch = element('button', 'mode-switch');
     this.modeSwitch.type = 'button';
+    this.modeSwitch.tabIndex = -1;
     this.modeSwitch.setAttribute('role', 'switch');
     this.modeSwitch.setAttribute('aria-checked', 'false');
     this.modeSwitch.setAttribute(
@@ -2226,6 +2133,7 @@ export class Panel {
     for (let index = 0; index < 10; index += 1) {
       const button = element('button', 'rhythm-key');
       button.type = 'button';
+      button.tabIndex = -1;
       button.setAttribute('aria-pressed', 'false');
       const nameA = RHYTHM_NAMES[index] ?? '';
       const nameB = RHYTHM_NAMES[index + 10] ?? '';
@@ -2242,12 +2150,6 @@ export class Panel {
       button.addEventListener('pointercancel', (event) =>
         this.cancelPress(event.pointerId),
       );
-      button.addEventListener('keydown', (event) =>
-        this.onKeyKeyDown(index, event),
-      );
-      button.addEventListener('keyup', (event) => this.onKeyKeyUp(index, event));
-      button.addEventListener('blur', () => this.cancelKeyPress());
-      button.addEventListener('click', (event) => this.onKeyClick(index, event));
       // A long press on a touch screen must not open the context menu.
       button.addEventListener('contextmenu', (event) => event.preventDefault());
       this.keyButtons.push(button);
@@ -2266,6 +2168,7 @@ export class Panel {
     // to a screen reader.
     this.startStop = element('button', 'start-stop');
     this.startStop.type = 'button';
+    this.startStop.tabIndex = -1;
     this.startStop.setAttribute('aria-pressed', 'false');
     this.startStop.setAttribute('aria-label', 'Start or stop rhythm');
     const startLabel = element('span', 'start-label', 'START');
@@ -2291,6 +2194,7 @@ export class Panel {
     markB.setAttribute('aria-hidden', 'true');
     this.bankSwitch = element('button', 'bank-switch');
     this.bankSwitch.type = 'button';
+    this.bankSwitch.tabIndex = -1;
     this.bankSwitch.setAttribute('role', 'switch');
     this.bankSwitch.setAttribute('aria-checked', 'false');
     this.bankSwitch.setAttribute('aria-label', 'Rhythm bank A or B');
@@ -2326,9 +2230,7 @@ export class Panel {
       true,
     );
     // The hidden sequence is typed with the arrow keys of the
-    // keyboard. It is watched after the controls of the panel have had
-    // their say: an arrow that a control has taken is not a step of the
-    // sequence.
+    // keyboard.
     document.addEventListener('keydown', (event) =>
       this.onBandCodeKeyDown(event),
     );
@@ -2470,10 +2372,6 @@ export class Panel {
    * The arrow is a step of the hidden sequence, which opens the band
    * of knobs in the classic mode. The sequence is only typed in the
    * classic mode: in the advanced mode the band is open already.
-   *
-   * An arrow that belongs to a control of the panel is not a step: the
-   * arrow keys of a fader, of the tempo knob and of the knobs of the band
-   * move those controls.
    */
   private onBandCodeKeyDown(event: KeyboardEvent): void {
     if (
@@ -2483,9 +2381,7 @@ export class Panel {
       event.metaKey ||
       event.altKey ||
       event.isComposing ||
-      this.isTypingTarget(event) ||
-      this.isCardTarget(event) ||
-      this.isControlTarget(event)
+      this.isTypingTarget(event)
     ) {
       return;
     }
@@ -2502,21 +2398,6 @@ export class Panel {
       // The arrow is a step of the sequence: the page does not scroll.
       event.preventDefault();
     }
-  }
-
-  /**
-   * Whether the key belongs to a control of the panel.
-   *
-   * The arrow keys of a fader, of a knob and of the knobs of the band
-   * belong to that control: they move it and they are not a step of the
-   * sequence.
-   */
-  private isControlTarget(event: KeyboardEvent): boolean {
-    const target = event.target;
-    return (
-      target instanceof HTMLElement &&
-      target.getAttribute('role') === 'slider'
-    );
   }
 
   /**
@@ -2559,8 +2440,7 @@ export class Panel {
       event.metaKey ||
       event.altKey ||
       event.isComposing ||
-      this.isTypingTarget(event) ||
-      this.isCardTarget(event)
+      this.isTypingTarget(event)
     ) {
       return;
     }
@@ -2637,18 +2517,6 @@ export class Panel {
       return;
     }
     event.preventDefault();
-  }
-
-  /**
-   * Whether the key belongs to the pattern card.
-   *
-   * The card is a switchboard of its own: the arrow keys walk over the
-   * grid and the space bar puts a voice into a step. The shortcuts of the
-   * panel wait until the user is back on the panel.
-   */
-  private isCardTarget(event: KeyboardEvent): boolean {
-    const target = event.target;
-    return target instanceof Node && this.card.element.contains(target);
   }
 
   private isTypingTarget(event: KeyboardEvent): boolean {
@@ -2753,43 +2621,6 @@ export class Panel {
     this.endPointerPress(pointerId);
   }
 
-  private beginKeyPress(index: number): void {
-    this.endKeyPress();
-    const press: KeyPress = {
-      index,
-      long: false,
-      timer: 0,
-      chord: false,
-      footprint: null,
-    };
-    press.timer = setTimeout(() => {
-      if (this.keyPress !== press) {
-        return;
-      }
-      press.long = true;
-      this.applyLongPress(index);
-    }, LONG_PRESS_MS);
-    this.keyPress = press;
-  }
-
-  private endKeyPress(): void {
-    if (this.keyPress === null) {
-      return;
-    }
-    clearTimeout(this.keyPress.timer);
-    this.keyPress = null;
-  }
-
-  /**
-   * A key that loses the focus while it is held down gives the press back.
-   * Only a key press is taken back this way: a pointer press belongs to
-   * the key that is under the pointer, and the focus moves to that key
-   * while the press is already running.
-   */
-  private cancelKeyPress(): void {
-    this.endKeyPress();
-  }
-
   private onKeyPointerDown(
     index: number,
     button: HTMLButtonElement,
@@ -2812,7 +2643,6 @@ export class Panel {
     // the press belongs to the key that was pressed down, even when the
     // key moves out from under the pointer.
     button.setPointerCapture(event.pointerId);
-    this.keyboardHandled = false;
     this.beginPointerPress(index, event.pointerId, footprintOf(button));
   }
 
@@ -2831,52 +2661,6 @@ export class Panel {
       press.footprint !== null &&
       !onFootprint(press.footprint, event.clientX, event.clientY)
     ) {
-      return;
-    }
-    this.applyShortPress(index);
-  }
-
-  private onKeyKeyDown(index: number, event: KeyboardEvent): void {
-    if (event.key !== 'Enter') {
-      return;
-    }
-    if (event.repeat) {
-      return;
-    }
-    this.keyboardHandled = false;
-    this.beginKeyPress(index);
-  }
-
-  private onKeyKeyUp(index: number, event: KeyboardEvent): void {
-    if (event.key !== 'Enter') {
-      return;
-    }
-    const press = this.keyPress;
-    if (press === null || press.index !== index) {
-      return;
-    }
-    this.endKeyPress();
-    this.keyboardHandled = true;
-    if (!press.long) {
-      this.applyShortPress(index);
-    }
-  }
-
-  /**
-   * The click that follows a press. A click that comes from the mouse or
-   * from a touch screen was already handled by the pointer events; a click
-   * that the keyboard produced is handled here.
-   */
-  private onKeyClick(index: number, event: MouseEvent): void {
-    if (event.detail !== 0) {
-      return;
-    }
-    if (this.keyboardHandled) {
-      this.keyboardHandled = false;
-      return;
-    }
-    if (this.keyPress !== null) {
-      // Enter produces its click while the key is still held down.
       return;
     }
     this.applyShortPress(index);
