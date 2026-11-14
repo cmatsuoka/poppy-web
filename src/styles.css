@@ -100,8 +100,8 @@ body {
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
   background:
-    radial-gradient(ellipse at 50% 12%, #313936 0%, #1a1f1d 42%, #0d100f 78%),
-    #0b0d0c;
+    radial-gradient(ellipse at 50% 12%, #3e566e 0%, #232f3d 42%, #151d28 78%),
+    #131b25;
   color: #e8e4d8;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
