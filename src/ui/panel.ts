@@ -1587,7 +1587,13 @@ export class Panel {
       this.engine.setUserPattern(index, pattern);
     }
 
-    engine.onPanel((state) => this.render(state));
+    engine.onPanel((state, audioTime) => {
+      // Every snapshot pins the mapping between the clock the MIDI
+      // timestamps keep and the audio clock the machine renders on: the
+      // clock follows the tempo on the engine's own clock.
+      this.midi.addTiming(performance.now(), audioTime);
+      this.render(state);
+    });
     engine.onError((message) => {
       this.showStatus(message, true);
       const failure = this.engine.unavailable;

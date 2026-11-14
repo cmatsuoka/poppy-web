@@ -130,7 +130,7 @@ export class PoppyEngine {
   private starting: Promise<void> | null = null;
   private panelState: PanelState = { ...INITIAL_PANEL_STATE };
   private settings = defaultSettings();
-  private panelListeners = new Set<(state: PanelState) => void>();
+  private panelListeners = new Set<(state: PanelState, audioTime: number) => void>();
   private errorListeners = new Set<(message: string) => void>();
   private pending: EngineCommand[] = [];
   private patternRequests = new Map<
@@ -181,7 +181,7 @@ export class PoppyEngine {
     return this.context?.sampleRate ?? FALLBACK_SAMPLE_RATE;
   }
 
-  onPanel(listener: (state: PanelState) => void): () => void {
+  onPanel(listener: (state: PanelState, audioTime: number) => void): () => void {
     this.panelListeners.add(listener);
     return () => {
       this.panelListeners.delete(listener);
@@ -799,7 +799,7 @@ export class PoppyEngine {
       case 'panel':
         this.panelState = event.state;
         for (const listener of this.panelListeners) {
-          listener(this.panelState);
+          listener(this.panelState, event.audioTime);
         }
         break;
       case 'pattern': {

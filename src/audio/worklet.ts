@@ -524,7 +524,14 @@ class PoppyProcessor extends AudioWorkletProcessor {
     last.flashCount = panel.flashCount;
     last.source = panel.source;
 
-    this.emit({ type: 'panel', state: { ...panel } });
+    // The snapshot carries the audio clock it was made at: the machine
+    // renders the tempo on this clock, so a follower that measures the
+    // external clock has to measure it against this one.
+    this.emit({
+      type: 'panel',
+      state: { ...panel },
+      audioTime: currentTime,
+    });
   }
 
   /**

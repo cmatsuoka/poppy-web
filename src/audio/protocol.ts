@@ -324,7 +324,12 @@ export type EngineCommand =
 
 export type EngineEvent =
   | { type: 'ready' }
-  | { type: 'panel'; state: PanelState }
+  /**
+   * A snapshot of the machine, with the audio clock it was made at: the
+   * machine renders the tempo on the audio clock, so a follower that
+   * measures an external clock measures it against this one.
+   */
+  | { type: 'panel'; state: PanelState; audioTime: number }
   | { type: 'pattern'; bank: Bank; buttons: number; view: PatternView }
   | { type: 'userPattern'; index: number; pattern: UserPattern }
   | { type: 'sounding'; on: boolean }
