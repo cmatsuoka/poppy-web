@@ -19,7 +19,7 @@ LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpops.git}"
 # against, the adjustable high-pass of the cymbals and the external step
 # clock (pops_next_step, the sentinel tempo of (0, 0)) are upstream now.
 # Update this deliberately: the API is still moving.
-LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-f9f714ae5cce7eca82d8716eee006afb33cf829a}"
+LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-5487520f4eb8ca0fbd3166fdba4676c38fc40776}"
 # The checkout of the library that carries the newest API.
 LIBPOPS_SIBLING="${LIBPOPS_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.
