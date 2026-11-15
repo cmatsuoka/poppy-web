@@ -13,8 +13,22 @@
 /** The clock pulses MIDI counts on a quarter note. */
 const PULSES_PER_QUARTER = 24;
 
-/** How much of a fresh interval the tempo estimate of the print takes in. */
-const BPM_EMA = 0.2;
+/**
+ * How many pulses one estimate of the print averages over: a quarter
+ * note of clock. The readout turns over once per window - twice a second
+ * at 120 BPM - so the wander of a single pulse never reaches it, and a
+ * print that lags the leader by up to one quarter note is a print and
+ * nothing more.
+ */
+const WINDOW_PULSES = 24;
+
+/**
+ * The longest gap a live clock leaves between two pulses, in
+ * milliseconds: the estimate carries tempos down to thirty a minute,
+ * whose pulses stand 83 ms apart, and a gap of over 104 ms is a pause of
+ * the clock, not a tempo. The pause is what the estimate starts over at.
+ */
+const MAX_PULSE_MS = 104;
 
 /** The tempo of a MIDI clock, for the print of the readout. */
 export interface MidiTempo {
@@ -72,8 +86,10 @@ export class MidiClockSync {
   private static readonly CLOCK_IDLE_MS = 2000;
   /** The wall time of the last accepted pulse, behind the print. */
   private lastPulse = -1;
-  /** The estimate of a quarter note, in seconds, behind the print. */
-  private quarterSeconds: number | null = null;
+  /** The pulse gaps of the window that is filling, in milliseconds. */
+  private windowMs = 0;
+  /** How many gaps the window has taken in so far. */
+  private windowCount = 0;
   /** The tempo last handed to the print, so a steady clock prints once. */
   private sent = -1;
 
@@ -199,7 +215,8 @@ export class MidiClockSync {
       // a clock that changes its mind is never read across the switch.
       if (!this.byArrival) {
         this.byArrival = true;
-        this.quarterSeconds = null;
+        this.windowMs = 0;
+        this.windowCount = 0;
         this.lastPulse = -1;
       }
       time = performance.now();
@@ -233,54 +250,61 @@ export class MidiClockSync {
     this.lastPulse = time;
     this.onPulse();
 
-    // The estimate behind the print: the interval between two pulses, on
-    // the clock of their stamps (or of the arrival, when the stamps are
-    // unusable). A print made on this clock plays nothing at it - the
-    // machine is driven by the pulses - so the wander of the driver's
-    // stamps only reaches what the readout shows.
-    const interval = previous >= 0 ? time - previous : null;
-    const bpm = this.bpmOf(interval);
-    if (bpm !== null) {
-      const usPerQuarter = Math.round(60000000 / bpm);
-      if (usPerQuarter !== this.sent) {
-        this.sent = usPerQuarter;
-        this.onTempo({ usPerQuarter, bpm });
-      }
-    } else {
+    // The estimate behind the print: the average of the last WINDOW_PULSES
+    // gaps, on the clock of their stamps (or of the arrival, when the
+    // stamps are unusable). A print made on this clock plays nothing at it
+    // - the machine is driven by the pulses - so the wander of the
+    // driver's stamps only reaches what the readout shows, and the block
+    // average spreads that wander over the window instead of taking each
+    // gap on its own.
+    const gap = previous >= 0 ? time - previous : -1;
+    if (gap <= 0) {
+      // The first pulse has no gap behind it (lastPulse holds -1), and a
+      // reading the stamps cannot carry is left out of the window; the
+      // average stays good.
+      return;
+    }
+    if (gap > MAX_PULSE_MS) {
+      // A pause of the clock arrives as one long gap: the estimate starts
+      // over and the readout goes back to where the tempo comes from.
       this.onTempoMissing();
+      return;
     }
-  }
-
-  /** Smooth the interval of a pulse into the bpm of the print. */
-  private bpmOf(interval: number | null): number | null {
-    if (interval === null || interval <= 0) {
-      return null;
+    this.windowMs += gap;
+    this.windowCount += 1;
+    if (this.windowCount < WINDOW_PULSES) {
+      return;
     }
-    // A quarter note is PULSES_PER_QUARTER of these: the interval is the
-    // length of one pulse, in milliseconds.
-    const quarter = (interval / 1000) * PULSES_PER_QUARTER;
+    // A quarter note is PULSES_PER_QUARTER of these gaps: the average gap
+    // is the length of one pulse, in milliseconds.
+    const quarter =
+      (this.windowMs / 1000) * (PULSES_PER_QUARTER / this.windowCount);
+    this.windowMs = 0;
+    this.windowCount = 0;
     // Outside a beat of thirty to two thousand a minute a clock is not
-    // saying anything this follower can use - a pause of the clock
-    // arrives here as one absurd interval and is let go.
+    // saying anything this follower can use.
     if (quarter < 0.03 || quarter > 2.0) {
-      return null;
+      this.onTempoMissing();
+      return;
     }
-    this.quarterSeconds =
-      this.quarterSeconds === null
-        ? quarter
-        : this.quarterSeconds + (quarter - this.quarterSeconds) * BPM_EMA;
-    return 60 / this.quarterSeconds;
+    const bpm = 60 / quarter;
+    const usPerQuarter = Math.round(60000000 / bpm);
+    if (usPerQuarter !== this.sent) {
+      this.sent = usPerQuarter;
+      this.onTempo({ usPerQuarter, bpm });
+    }
   }
 
   /**
-   * The clock has not said its tempo yet, or has dropped out of the range
-   * the estimate can carry: the readout goes back to where the tempo
-   * comes from.
+   * The clock has not said its tempo yet, has dropped out of the range
+   * the estimate can carry, or has paused: the readout goes back to where
+   * the tempo comes from, and the window starts over.
    */
   private onTempoMissing(): void {
+    this.windowMs = 0;
+    this.windowCount = 0;
     if (this.sent !== -1) {
       this.sent = -1;
-      this.quarterSeconds = null;
       this.onTempo({ usPerQuarter: 0, bpm: 0 });
     }
   }
@@ -290,7 +314,8 @@ export class MidiClockSync {
     this.clockInput = null;
     this.inputPulseSeen.clear();
     this.lastPulse = -1;
-    this.quarterSeconds = null;
+    this.windowMs = 0;
+    this.windowCount = 0;
     this.sent = -1;
   }
 }
