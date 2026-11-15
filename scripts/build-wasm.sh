@@ -16,9 +16,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBPOPS_REPO="${LIBPOPS_REPO:-https://github.com/cmatsuoka/libpops.git}"
 # The rename to libpops, the sound adjustments the panel is written
-# against, and the adjustable high-pass of the cymbals are upstream now.
+# against, the adjustable high-pass of the cymbals and the external step
+# clock (pops_next_step, the sentinel tempo of (0, 0)) are upstream now.
 # Update this deliberately: the API is still moving.
-LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-65a62445a5cb46d4da46ae98f5b3bc78b380d124}"
+LIBPOPS_COMMIT="${LIBPOPS_COMMIT:-f9f714ae5cce7eca82d8716eee006afb33cf829a}"
 # The checkout of the library that carries the newest API.
 LIBPOPS_SIBLING="${LIBPOPS_SIBLING:-$ROOT/../minipops}"
 # The pristine sources the build is made from.
@@ -123,7 +124,7 @@ cat > "$OUT_DIR/version.ts" <<EOF
 export const LIBPOPS_VERSION = '${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}';
 EOF
 
-EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_set_tempo_us","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_instr_tune","_poppy_set_instr_decay","_poppy_set_instr_cutoff","_poppy_set_instr_fx_send","_poppy_set_accent_gain","_poppy_panel_state","_poppy_selection_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
+EXPORTED_FUNCTIONS='["_malloc","_free","_poppy_version","_poppy_instrument_count","_poppy_rhythm_count","_poppy_create","_poppy_destroy","_poppy_reset","_poppy_process","_poppy_trigger","_poppy_select_rhythm","_poppy_stop_rhythms","_poppy_set_tempo","_poppy_next_step","_poppy_set_volume","_poppy_set_balance","_poppy_set_instr_gain","_poppy_set_instr_pan","_poppy_set_instr_tune","_poppy_set_instr_decay","_poppy_set_instr_cutoff","_poppy_set_instr_fx_send","_poppy_set_accent_gain","_poppy_panel_state","_poppy_selection_pattern","_poppy_set_pattern_source","_poppy_get_pattern_source","_poppy_set_user_pattern","_poppy_user_pattern"]'
 
 # The extended build of the engine: it carries the 20 user pattern slots and
 # the switch that points the sequencer at them, and the reverb bus that the

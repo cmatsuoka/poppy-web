@@ -20,6 +20,16 @@ import {
 const BLOCK_FRAMES = 128;
 const PANEL_INTERVAL = Math.max(1, Math.round(sampleRate / 20));
 /**
+ * Which column of the pattern each step fires and which engine call fires it.
+ * The steps come from the external MIDI clock here, one next_step() call
+ * per group of pulses: the straight grid holds eight columns to the quarter
+ * note and the compound grid six, and the clock sends 24 pulses to the same
+ * quarter note, so a whole number of pulses divides into each column and no
+ * counting error is left over.
+ */
+const PULSES_PER_COLUMN_STRAIGHT = 3;
+const PULSES_PER_COLUMN_COMPOUND = 4;
+/**
  * How long the noise floor stays open after the last sound, so a decaying
  * voice or a reverb tail is not cut off from the speaker-gate workaround.
  */
@@ -88,6 +98,23 @@ class PoppyProcessor extends AudioWorkletProcessor {
   private reportSounding = false;
   /** The scratch buffer the user patterns are written through. */
   private userNotesPtr = 0;
+  /**
+   * The external step clock. While it is on, the engine holds the sentinel
+   * tempo, the sample clock does not advance the playhead, and the steps
+   * of the pattern are issued here: the pulses of the MIDI clock are
+   * counted, one step is owed per group of pulses, and the owed steps
+   * walk out one render quantum apart.
+   */
+  private externalClock = false;
+  /** The pulses counted toward the next step. */
+  private clockQuota = 0;
+  /** The steps the counted pulses owed and that are walking out. */
+  private owedSteps = 0;
+  /** The applied selection the grid ratio was read for. */
+  private gridBank = -1;
+  private gridButtons = -1;
+  /** Whether the selection that is playing runs on the compound grid. */
+  private gridCompound = false;
 
   constructor(options: WorkletOptions) {
     super();
@@ -133,6 +160,19 @@ class PoppyProcessor extends AudioWorkletProcessor {
         }
       }
       return true;
+    }
+
+    // The steps the counted pulses owed: bunched pulses arrive in one
+    // message drain and would mask each other if their steps fired in
+    // it, so at most one step is issued a quantum - every hit keeps its
+    // attack, and a bundle's steps walk out over the few milliseconds
+    // they need. The position stays a count of pulses received.
+    if (this.externalClock && this.owedSteps > 0) {
+      this.owedSteps -= 1;
+      module._poppy_next_step(this.context);
+      // A wrap the step walked into can carry an applied selection,
+      // whose grid the ratio of the following steps rides on.
+      this.readPanel();
     }
 
     module._poppy_process(this.context, this.outPtr, BLOCK_FRAMES);
@@ -327,15 +367,28 @@ class PoppyProcessor extends AudioWorkletProcessor {
       case 'start': {
         this.readPanel();
         this.reportSounding = true;
+        if (this.panel.running) {
+          // The clock started again while the machine plays: the stop of
+          // the transport takes the playhead back to its first step, and
+          // the selection starts it from there. The machine holds no
+          // position of its own, so a restart of the clock re-anchors the
+          // cycle instead of leaving it wherever the playing ran to.
+          module._poppy_stop_rhythms(this.context);
+        }
         module._poppy_select_rhythm(
           this.context,
           this.panel.bank,
           this.panel.buttons,
         );
+        // The clock's start opens a new group of pulses: the first one
+        // fires the column the playhead rests on, the downbeat of the
+        // pattern, and the counting of the pulses starts over there.
+        this.resetClock();
         break;
       }
       case 'stop':
         module._poppy_stop_rhythms(this.context);
+        this.resetClock();
         break;
       case 'sync':
         // The context has just been woken after being parked, or the main
@@ -361,11 +414,54 @@ class PoppyProcessor extends AudioWorkletProcessor {
         module._poppy_trigger(this.context, command.instrument, command.velocity);
         break;
       case 'tempo':
+        if (this.externalClock) {
+          // The sync is on: the tempo setting is completely ignored. The
+          // machine plays at the pace of the pulses, and a stray setting
+          // must not leave the sentinel tempo of the step clock - the
+          // mode is only ever left by the sync being switched off, which
+          // restores the tempo the knob points at through its own
+          // command.
+          break;
+        }
         module._poppy_set_tempo(this.context, command.bpm);
         break;
-      case 'tempoUs':
-        module._poppy_set_tempo_us(this.context, command.usPerQuarter);
+      case 'externalClock':
+        if (command.on) {
+          // The sentinel tempo of (0, 0): the sample clock stops moving
+          // the playhead, and the steps arrive with the pulses of the
+          // clock.
+          this.externalClock = true;
+          this.resetClock();
+          module._poppy_set_tempo(this.context, 0);
+        } else {
+          this.externalClock = false;
+          // The tempo the knob points at restores the engine's own
+          // clock, from wherever the clock-driven steps left the
+          // playhead. A zero would re-enter the sentinel, so the panel
+          // always hands a real tempo over on the way out.
+          const bpm = command.bpm ?? 0;
+          if (bpm > 0) {
+            module._poppy_set_tempo(this.context, Math.round(bpm));
+          }
+        }
         break;
+      case 'midiPulse': {
+        if (!this.externalClock) {
+          break;
+        }
+        // The counted pulse: the machine's pace is the number of pulses
+        // received, nothing measured and nothing scheduled - one step is
+        // owed per group of pulses. The owed steps are handed to the
+        // renderer one quantum apart: the browser delivers pulses in
+        // lumps, and two steps of the same voice fired in one lump mask
+        // each other's attacks - the sound of half a clave.
+        this.clockQuota += 1;
+        if (this.clockQuota >= this.pulsesPerColumn) {
+          this.clockQuota -= this.pulsesPerColumn;
+          this.owedSteps += 1;
+        }
+        break;
+      }
       case 'volume':
         module._poppy_set_volume(this.context, command.value);
         break;
@@ -494,6 +590,61 @@ class PoppyProcessor extends AudioWorkletProcessor {
     panel.column = (heap[base + 6] ?? 0) & 0x3f;
     panel.flashCount = (heap[base + 7] ?? 0) >>> 0;
     panel.source = (heap[base + 8] ?? 0) === 1 ? 1 : 0;
+
+    // The grid the applied selection plays on decides the pulse a step is
+    // issued at. The applied selection is the one the engine's sequencer
+    // runs on - a change that waits for the end of the cycle is applied
+    // there - so this is read whenever the playhead's selection moves,
+    // which is the moment the grid changes.
+    if (panel.bank !== this.gridBank || panel.buttons !== this.gridButtons) {
+      this.gridBank = panel.bank;
+      this.gridButtons = panel.buttons;
+      this.refreshGrid();
+    }
+  }
+
+  /**
+   * Read the grid of the applied selection out of the engine.
+   *
+   * The engine composes the selection, and the view it hands out carries
+   * the grid it plays on: the compound grid is the one a beat holds six
+   * columns of. The view of nothing to play is read as the straight grid.
+   */
+  private refreshGrid(): void {
+    const module = this.module;
+    if (module === null) {
+      return;
+    }
+
+    const pointer = module._poppy_selection_pattern(
+      this.context,
+      this.gridBank,
+      this.gridButtons,
+    );
+    const base = pointer >> 2;
+    const heap = module.HEAP32;
+    this.gridCompound =
+      (heap[base + 5] ?? 0) !== 0 && (heap[base + 4] ?? 0) !== 0;
+  }
+
+  /** The pulses of the MIDI clock that build one step of the pattern. */
+  private get pulsesPerColumn(): number {
+    return this.gridCompound
+      ? PULSES_PER_COLUMN_COMPOUND
+      : PULSES_PER_COLUMN_STRAIGHT;
+  }
+
+  /**
+   * Count the pulses of the clock from a fresh group.
+   *
+   * The quota starts one short of a step, so the first pulse of the group
+   * fires the step it opens: the downbeat of the pattern lands on the
+   * first pulse after the clock's start, and every column after it falls
+   * on the pulse the grid says.
+   */
+  private resetClock(): void {
+    this.clockQuota = this.pulsesPerColumn - 1;
+    this.owedSteps = 0;
   }
 
   private postPanel(): void {

@@ -619,6 +619,132 @@ int main(void)
     check(memcmp(before, after, sizeof(before)) != 0,
           "a note that is sounding takes the pan that was moved");
 
+    /* The external step clock: the sentinel tempo of (0, 0) parks the
+     * playhead against the sample clock, and poppy_next_step() walks it
+     * one step per call, so a host that receives MIDI sync events - 24
+     * pulses to the quarter note - drives the pattern. A whole number of
+     * those pulses builds one column: three on the straight grid, where
+     * a beat holds eight columns, and four on the compound one, where a
+     * beat holds six. The worklet of the panel counts the pulses and
+     * hands a step over at the pulse each column of the grid falls on.
+     *
+     * The pattern of every one of these checks hits on every enabled
+     * column, so a step always has something to play and the columns the
+     * calls visit are read off the panel state. */
+    static uint16_t step_notes[POPS_USER_PATTERN_COLUMNS];
+    static int16_t resumed[16384];
+
+    for (int column = 0; column < POPS_USER_PATTERN_COLUMNS; column++) {
+        step_notes[column] = (uint16_t)(1u << 0);
+    }
+
+    /* The sentinel parks the playhead: no next_step call, no movement,
+     * however long the render runs. */
+    poppy_reset(ctx);
+    poppy_set_pattern_source(ctx, 1);
+    check(poppy_set_user_pattern(ctx, 7, (int32_t)(uintptr_t)step_notes,
+                                 POPS_TIMESIG_4_4) == 1,
+          "a pattern for the step clock is written");
+    poppy_select_rhythm(ctx, 0, 1 << 7);
+    poppy_set_tempo(ctx, 0);
+    render(ctx, after, 2048);
+    check(poppy_panel_state(ctx)[6] == 0,
+          "the sentinel tempo holds the playhead");
+
+    /* The first call fires the column the playhead rests on, the
+     * downbeat of the pattern: the column does not move with it. */
+    check(poppy_next_step(ctx) == 1, "a step plays under the step clock");
+    check(poppy_panel_state(ctx)[6] == 0,
+          "the first step fires the column the playhead rests on");
+
+    /* The straight grid: three pulses to the column. Ten pulses into the
+     * clock put the playhead on column 3 - pulses 0, 3, 6 and 9 carry
+     * the steps, the first of them the downbeat. */
+    for (int pulse = 1; pulse < 10; pulse++) {
+        if (pulse % 3 == 0) {
+            check(poppy_next_step(ctx) == 1, "a step plays under the step clock");
+        }
+    }
+    check(poppy_panel_state(ctx)[6] == 3,
+          "the straight grid advances one column per three pulses");
+
+    /* The calls do nothing while the transport is stopped, and the stop
+     * of the machine takes the playhead back to its first step. */
+    poppy_stop_rhythms(ctx);
+    check(poppy_next_step(ctx) == 0,
+          "a step against a stopped transport does nothing");
+    check(poppy_panel_state(ctx)[6] == 0,
+          "a stopped transport plays nothing and holds its step back");
+
+    /* The compound grid: four pulses to the column, and the view of the
+     * selection says as much. */
+    poppy_reset(ctx);
+    poppy_set_pattern_source(ctx, 1);
+    check(poppy_set_user_pattern(ctx, 7, (int32_t)(uintptr_t)step_notes,
+                                 POPS_TIMESIG_6_8T) == 1,
+          "a compound pattern for the step clock is written");
+    poppy_select_rhythm(ctx, 0, 1 << 7);
+    poppy_set_tempo(ctx, 0);
+    int32_t *step_view = poppy_selection_pattern(ctx, 0, 1 << 7);
+    check(step_view[4] == 1, "the pattern for the compound steps is compound");
+
+    check(poppy_next_step(ctx) == 1, "a step of the compound grid plays");
+    check(poppy_panel_state(ctx)[6] == 0,
+          "the compound first step fires the resting column");
+    for (int pulse = 1; pulse < 9; pulse++) {
+        if (pulse % 4 == 0) {
+            check(poppy_next_step(ctx) == 1, "a step of the compound grid plays");
+        }
+    }
+    check(poppy_panel_state(ctx)[6] == 2,
+          "the compound grid advances one column per four pulses");
+
+    /* A column the mask leaves out takes no time: the next call walks
+     * over it, the way a column boundary of the sample clock does. The
+     * row of the 5/4 meter leaves the columns between its runs out, and
+     * the steps the host sends visit the enabled columns only. */
+    poppy_reset(ctx);
+    poppy_set_pattern_source(ctx, 1);
+    check(poppy_set_user_pattern(ctx, 7, (int32_t)(uintptr_t)step_notes,
+                                 POPS_TIMESIG_5_4T) == 1,
+          "a 5/4 pattern for the step clock is written");
+    poppy_select_rhythm(ctx, 0, 1 << 7);
+    poppy_set_tempo(ctx, 0);
+
+    uint64_t skipped_mask = pops_timesig_enable_mask(POPS_TIMESIG_5_4T);
+    int visited = 0;
+    int walks_the_gaps = 1;
+    for (int step = 0; step < 30 && walks_the_gaps; step++) {
+        if (poppy_next_step(ctx) == 0) {
+            break;
+        }
+        int column = poppy_panel_state(ctx)[6];
+        if (((skipped_mask >> column) & 1u) == 0u) {
+            walks_the_gaps = 0;
+        }
+        visited++;
+    }
+    check(visited == 30 && walks_the_gaps,
+          "the steps visit the columns the mask enables, and no others");
+
+    /* An internal tempo leaves the step clock again: the playhead is
+     * wherever the steps left it, and the sample clock moves it once the
+     * render runs. A further next_step call does nothing now. */
+    check(poppy_next_step(ctx) == 1, "the last step of the step clock plays");
+    poppy_set_tempo(ctx, 120);
+    check(poppy_next_step(ctx) == 0,
+          "a next_step call without the sentinel does nothing");
+    poppy_reset(ctx);
+    poppy_set_pattern_source(ctx, 1);
+    check(poppy_set_user_pattern(ctx, 7, (int32_t)(uintptr_t)step_notes,
+                                 POPS_TIMESIG_4_4) == 1,
+          "a pattern for the internal clock is written");
+    poppy_select_rhythm(ctx, 0, 1 << 7);
+    poppy_set_tempo(ctx, 120);
+    render(ctx, resumed, 16384);
+    check(poppy_panel_state(ctx)[6] != 0,
+          "the internal tempo moves the playhead again");
+
     poppy_destroy(ctx);
     printf("%s\n",
            failures == 0 ? "all glue checks passed" : "there were failures");

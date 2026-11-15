@@ -133,17 +133,28 @@ WASM_EXPORT void poppy_stop_rhythms(void *ctx)
 
 WASM_EXPORT void poppy_set_tempo(void *ctx, int32_t bpm)
 {
+    /* (0, 0) is the sentinel of the external step clock: the sequencer
+     * stops advancing against the sample clock and pops_next_step()
+     * advances the pattern one step per call, so a host that receives
+     * MIDI sync events drives the steps. The mode is left by any other
+     * tempo, which is how the panel gives the tempo back to its knob. */
     pops_set_tempo(ctx, (uint16_t)bpm, 0u);
 }
 
-/* The tempo in microseconds per quarter note, the tempo format of MIDI
- * clocks and MIDI files: 500000 is 120 BPM. The engine clamps it to its
- * range (240 BPM down to 1 BPM), and the conversion into the beat period
- * is exact, so a host that follows an external clock does not accumulate
- * drift against it. */
-WASM_EXPORT void poppy_set_tempo_us(void *ctx, int32_t us_per_quarter)
+/* One step of the pattern under the external step clock, and whether a
+ * step was played.
+ *
+ * The mode is entered with poppy_set_tempo(ctx, 0): the sample clock does
+ * not move the playhead, and this call moves it the way a column boundary
+ * of the sample clock does, so the host paces the steps from its sync
+ * source (a MIDI timing clock: three pulses to a column on the straight
+ * grid, four on the compound one). The call returns 0, and does nothing,
+ * when the mode is not entered, when the transport is stopped or when the
+ * pattern has nothing to play. It is called where the setters are called,
+ * never while poppy_process() is running on another thread. */
+WASM_EXPORT int32_t poppy_next_step(void *ctx)
 {
-    pops_set_tempo_us(ctx, (uint32_t)us_per_quarter);
+    return pops_next_step(ctx) ? 1 : 0;
 }
 
 WASM_EXPORT void poppy_set_volume(void *ctx, int32_t q16)

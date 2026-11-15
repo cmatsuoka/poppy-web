@@ -302,11 +302,22 @@ export type EngineCommand =
   | { type: 'trigger'; instrument: number; velocity: number }
   | { type: 'tempo'; bpm: number }
   /**
-   * Set the tempo the way an external MIDI clock hands it over: in
-   * microseconds per quarter note. The conversion in the engine is exact,
-   * so a host that follows the clock does not drift against it.
+   * Point the sequencer at the external step clock, or hand the tempo
+   * back to the knob.
+   *
+   * On: the engine is given the sentinel tempo of (0, 0) — the sample
+   * clock stops advancing the playhead, and every step is a call the
+   * worklet makes when a MIDI timing clock pulse is due. Off: the given
+   * tempo (the value the tempo knob points at) is put back, and the
+   * engine advances on its own clock again.
    */
-  | { type: 'tempoUs'; usPerQuarter: number }
+  | { type: 'externalClock'; on: boolean; bpm?: number }
+  /**
+   * One timing clock pulse of an external MIDI clock: the worklet counts
+   * the pulses and issues the engine's next step at the pulse the
+   * machine's grid says, the moment the message arrives.
+   */
+  | { type: 'midiPulse' }
   | { type: 'volume'; value: number }
   | { type: 'balance'; value: number }
   | { type: 'instrGain'; instrument: number; value: number }

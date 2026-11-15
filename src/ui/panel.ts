@@ -904,7 +904,7 @@ class Knob {
       'aria-valuetext',
       this.external === null
         ? `${this.value} beats per minute`
-        : `${this.value} beats per minute, not in use: the tempo is set by the external MIDI clock`,
+        : `${this.value} beats per minute, not in use: the steps follow the external MIDI clock`,
     );
     this.readout.value = this.external ?? `${this.value} BPM`;
   }
@@ -1263,23 +1263,41 @@ export class Panel {
   /**
    * The external MIDI clock.
    *
-   * While it is followed, the clock hands the tempo over in microseconds
-   * per quarter note, the tempo setting knob stands dimmed, and its
-   * readout prints the tempo the clock reports. The messages of the
-   * transport follow with it - a start or a continue plays, a stop takes
-   * the machine out - and they can only be read by the inputs the sync
-   * listens to, so none of it happens while the sync is off.
+   * While it is followed, the timing clock pulses drive the steps of the
+   * machine: every pulse is handed to the engine, which advances the
+   * pattern at the pulses' own grid, so the machine cannot drift against
+   * the clock its tempo is never measured for. The tempo setting knob
+   * stands dimmed, and its readout prints the tempo the clock reports.
+   * The messages of the transport follow with it - a start or a continue
+   * plays, a stop takes the machine out - and they can only be read by
+   * the inputs the sync listens to, so none of it happens while the sync
+   * is off.
    */
   private readonly midi = new MidiClockSync({
+    onPulse: () => {
+      this.engine.midiPulse();
+    },
     onTempo: (tempo) => {
-      this.engine.setTempoUs(tempo.usPerQuarter);
-      this.tempoKnob.setExternal(`${Math.round(tempo.bpm)} BPM`);
+      // A print, nothing more: the machine is driven by the pulses
+      // themselves. Before the first interval - or while the clock says
+      // nothing usable - the readout says where the tempo comes from.
+      this.tempoKnob.setExternal(
+        tempo.bpm > 0 ? `${Math.round(tempo.bpm)} BPM` : 'MIDI',
+      );
     },
     onStart: () => {
       // The machine only plays on a start that it waits for: the press
       // on the switch armed the replay, and so it is what the clock
       // starts.
       if (!this.midiArmed) {
+        return;
+      }
+      if (this.transportIntent) {
+        // The clock started again while the machine plays - a restart of
+        // the transport, say: the machine takes its first step again, so
+        // its cycle re-anchors to the clock instead of staying wherever
+        // the playing ran to.
+        void this.engine.start();
         return;
       }
       this.startTransport();
@@ -1587,11 +1605,7 @@ export class Panel {
       this.engine.setUserPattern(index, pattern);
     }
 
-    engine.onPanel((state, audioTime) => {
-      // Every snapshot pins the mapping between the clock the MIDI
-      // timestamps keep and the audio clock the machine renders on: the
-      // clock follows the tempo on the engine's own clock.
-      this.midi.addTiming(performance.now(), audioTime);
+    engine.onPanel((state) => {
       this.render(state);
     });
     engine.onError((message) => {
@@ -2200,8 +2214,9 @@ export class Panel {
     // The switch that follows an external MIDI clock. It is a deliberate
     // addition to the panel: the machine has no such switch, and the knob
     // of the tempo gives the tempo to it only while no clock does. While
-    // the clock is followed, the knob stands dimmed and its readout
-    // prints the tempo the clock hands over.
+    // the clock is followed, the knob stands dimmed, the steps of the
+    // machine follow the pulses of the clock, and the readout prints the
+    // tempo the clock reports.
     const midiSync = element('button', 'midi-sync');
     midiSync.type = 'button';
     midiSync.tabIndex = -1;
@@ -2210,7 +2225,7 @@ export class Panel {
     midiSync.setAttribute('aria-label', 'Follow an external MIDI clock');
     midiSync.setAttribute(
       'title',
-      'Follow the tempo of an external MIDI clock: the tempo knob is not used while it plays',
+      'Follow an external MIDI clock: the machine plays and keeps step when it does, and the tempo knob is not used while it does',
     );
     midiSync.append(element('span', 'midi-sync-mark', 'MIDI SYNC'));
     midiSync.addEventListener('click', () => {
@@ -2595,19 +2610,24 @@ export class Panel {
   /**
    * Follow an external MIDI clock, or hand the tempo back to the knob.
    *
-   * While the clock is followed, the tempo it reports is given to the
-   * engine in microseconds per quarter note and the tempo setting knob
-   * stands dimmed: it is not usable, and its readout prints the tempo
-   * the clock reports instead of the value it points at. The messages of
-   * the transport follow with it: a start or a continue plays, and a
-   * stop takes the machine out. All of it only while the clock is
-   * followed, because no input is read otherwise.
+   * While the clock is followed, its timing clock pulses drive the steps
+   * of the machine: the engine is put under the external step clock - it
+   * holds its playhead until a pulse arrives and advances one step at
+   * every third or fourth pulse, the grid the selection plays on - so
+   * the pattern position is a count of received pulses and cannot drift
+   * against the clock. The tempo setting knob stands dimmed: it is not
+   * usable, and its readout prints the tempo the clock reports. The
+   * messages of the transport follow with it: a start or a continue
+   * plays, and a stop takes the machine out. All of it only while the
+   * clock is followed, because no input is read otherwise.
    *
    * When the clock is let go, the knob is the tempo source again: the
-   * value it points at is given to the engine, and it reads its own BPM
-   * back. The way the switch stands is not kept between visits: following
-   * a clock asks for the MIDI inputs of the browser, and it asks only
-   * when the user wants it.
+   * value it points at is given to the engine - which leaves the
+   * external step clock and advances on its own from wherever the
+   * clock-driven steps left the playhead - and it reads its own BPM
+   * back. The way the switch stands is not kept between visits:
+   * following a clock asks for the MIDI inputs of the browser, and it
+   * asks only when the user wants it.
    */
   private async toggleMidiSync(): Promise<void> {
     if (this.midiSyncOn) {
@@ -2623,7 +2643,7 @@ export class Panel {
       this.tempoKnob.setEnabled(true);
       // The knob is the tempo source again: the engine takes the value it
       // stands at, so the machine plays at the tempo the print says.
-      this.engine.setTempo(this.tempoKnob.current);
+      this.engine.setExternalClock(false, this.tempoKnob.current);
       this.showStatus('External MIDI sync is off', false);
       return;
     }
@@ -2642,13 +2662,16 @@ export class Panel {
 
     this.midiSyncOn = true;
     this.renderMidiSync();
+    // The machine holds its playhead until the first pulse arrives, and
+    // every step follows the pulses from then on.
+    this.engine.setExternalClock(true, 0);
     this.tempoKnob.setEnabled(false);
     // The first clock pulse has not arrived yet: the readout says where
     // the tempo comes from, and the tempo of the clock replaces it.
     this.tempoKnob.setExternal('MIDI');
     this.showStatus(
       inputs > 0
-        ? 'External MIDI sync is on: the clock sets the tempo and the transport'
+        ? 'External MIDI sync is on: the clock drives the steps and the transport'
         : 'External MIDI sync is on, but no MIDI inputs are connected',
       false,
     );

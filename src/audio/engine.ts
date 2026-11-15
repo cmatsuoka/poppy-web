@@ -127,6 +127,13 @@ export class PoppyEngine {
   private idleSuspendTimer: ReturnType<typeof setTimeout> | null = null;
   /** Whether the worklet last reported that the machine makes a sound. */
   private sounding = false;
+  /**
+   * Whether the sequencer is under the external step clock. While it is,
+   * the tempo setting is completely ignored: the machine plays at the
+   * pace of the clock's pulses, and nothing may leave the sentinel tempo
+   * behind the sync's back.
+   */
+  private externalClockOn = false;
   private starting: Promise<void> | null = null;
   private panelState: PanelState = { ...INITIAL_PANEL_STATE };
   private settings = defaultSettings();
@@ -262,23 +269,46 @@ export class PoppyEngine {
    * while something plays, and the next start carries them over in order.
    */
   setTempo(bpm: number): void {
+    if (this.externalClockOn) {
+      // The sync is on and the machine plays at the pace of the clock's
+      // pulses: the tempo setting is completely ignored.
+      return;
+    }
     this.settings.tempo = Math.min(240, Math.max(1, Math.round(bpm)));
     this.post({ type: 'tempo', bpm: this.settings.tempo });
   }
 
   /**
-   * The tempo an external MIDI clock hands over, in microseconds per
-   * quarter note: 500000 is 120 BPM.
+   * Point the sequencer at the external step clock, or hand the tempo
+   * back to the knob.
    *
-   * The engine takes the value as it is and converts it exactly, so a host
-   * that follows the clock does not accumulate drift against it. The
-   * tempo setting reads back in beats per minute, the way it does for the
-   * knob, so the rest of the panel follows the tempo the machine runs at.
+   * On: the engine takes the sentinel tempo of (0, 0) — its playhead
+   * stands still until a MIDI timing clock pulse arrives, and every step
+   * of the pattern is then issued at the pulse the clock sent. The
+   * pattern position becomes a count of received pulses, so a follower
+   * cannot drift against the clock its tempo is not asked for any more.
+   *
+   * Off: the given tempo — the value the tempo knob points at — is put
+   * back, and the engine advances on its own clock again, from wherever
+   * the clock-driven steps left the playhead.
    */
-  setTempoUs(usPerQuarter: number): void {
-    const us = Math.min(60000000, Math.max(250000, Math.round(usPerQuarter)));
-    this.settings.tempo = Math.round(60000000 / us);
-    this.post({ type: 'tempoUs', usPerQuarter: us });
+  setExternalClock(on: boolean, bpm: number): void {
+    this.externalClockOn = on;
+    this.post({ type: 'externalClock', on, bpm: on ? undefined : bpm });
+  }
+
+  /**
+   * One timing clock pulse of an external MIDI clock: the worklet counts
+   * it and issues the engine's next step as it arrives, the moment it
+   * arrives.
+   *
+   * The pulse is posted alone, without a wake: the machine that follows a
+   * clock is running, so the worklet takes it on its next message drain,
+   * and an armed machine that waits sits parked - its steps begin when
+   * the clock's start wakes the machine.
+   */
+  midiPulse(): void {
+    this.post({ type: 'midiPulse' });
   }
 
   setVolume(value: number): void {

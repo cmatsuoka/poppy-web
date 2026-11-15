@@ -17,7 +17,7 @@ declare module '*poppy.mjs' {
     _poppy_select_rhythm(ctx: number, bank: number, buttons: number): void;
     _poppy_stop_rhythms(ctx: number): void;
     _poppy_set_tempo(ctx: number, bpm: number): void;
-    _poppy_set_tempo_us(ctx: number, usPerQuarter: number): void;
+    _poppy_next_step(ctx: number): number;
     _poppy_set_volume(ctx: number, q16: number): void;
     _poppy_set_balance(ctx: number, q16: number): void;
     _poppy_set_instr_gain(ctx: number, instrument: number, q16: number): void;
